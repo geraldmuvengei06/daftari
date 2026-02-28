@@ -29,8 +29,17 @@ export const recordPaymentSchema = z.object({
     .string()
     .min(1, "Amount is required")
     .refine((v) => !isNaN(Number(v)) && Number(v) > 0, "Amount must be greater than 0"),
-  status: z.enum(["confirmed", "pending", "failed"]),
+  status: z.enum(["paid", "pending", "failed"]),
   rawText: z.string().optional(),
+})
+
+export const createJobSchema = z.object({
+  customerId: z.string().min(1, "Customer is required"),
+  totalQuote: z
+    .string()
+    .min(1, "Quote amount is required")
+    .refine((v) => !isNaN(Number(v)) && Number(v) > 0, "Amount must be greater than 0"),
+  description: z.string().min(1, "Description is required").min(3, "Description is too short"),
 })
 
 export const featureRequestSchema = z.object({

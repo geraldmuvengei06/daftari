@@ -7,7 +7,7 @@ import { DataTable, type Column } from "@/components/data-table"
 import { AddCustomerModal } from "@/components/add-customer-modal"
 import { Button } from "@/components/ui/button"
 import { getCustomers } from "@/lib/actions"
-import type { Customer } from "@/lib/types"
+import type { CustomerWithBalance } from "@/lib/types"
 import { useRealtimeInserts } from "@/lib/use-realtime"
 import { TableSkeleton } from "@/components/skeletons"
 import { Plus } from "lucide-react"
@@ -22,7 +22,7 @@ function paginate<T>(items: T[], page: number, perPage: number) {
   }
 }
 
-const columns: Column<Customer>[] = [
+const columns: Column<CustomerWithBalance>[] = [
   {
     key: "name",
     header: "Name",
@@ -34,6 +34,23 @@ const columns: Column<Customer>[] = [
     key: "phone",
     header: "Phone",
     render: (row) => row.phone,
+  },
+  {
+    key: "balance",
+    header: "Balance",
+    className: "text-right",
+    render: (row) => {
+      if (row.total_job_quotes === 0 && row.total_paid === 0) {
+        return <span className="text-muted-foreground">—</span>
+      }
+      if (row.balance > 0) {
+        return <span className="text-destructive">Owes KES {row.balance.toLocaleString()}</span>
+      }
+      if (row.balance < 0) {
+        return <span className="text-green-600">Credit KES {Math.abs(row.balance).toLocaleString()}</span>
+      }
+      return <span className="text-green-600">Settled</span>
+    },
   },
   {
     key: "created_at",
@@ -51,7 +68,7 @@ const columns: Column<Customer>[] = [
 export default function CustomersPage() {
   const router = useRouter()
   const [page, setPage] = useState(1)
-  const [customers, setCustomers] = useState<Customer[]>([])
+  const [customers, setCustomers] = useState<CustomerWithBalance[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchCustomers = useCallback(async () => {

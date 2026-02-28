@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState, useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
@@ -13,30 +14,48 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
-import { signOut } from "@/lib/actions"
-import { CreditCard, Lightbulb, LogOut, User, Users } from "lucide-react"
+import { signOut, getTenant } from "@/lib/actions"
+import type { Tenant } from "@/lib/types"
+import { ClipboardList, CreditCard, Lightbulb, LogOut, User, Users } from "lucide-react"
 
 const topNavLinks = [
   { href: "/customers", label: "Customers", icon: Users },
+  { href: "/jobs", label: "Jobs", icon: ClipboardList },
   { href: "/payments", label: "Payments", icon: CreditCard },
-  { href: "/profile", label: "Profile", icon: User },
-  { href: "/feature-request", label: "Feature Request", icon: Lightbulb },
 ]
 
 const mobileTabLinks = [
   { href: "/customers", label: "Customers", icon: Users },
+  { href: "/jobs", label: "Jobs", icon: ClipboardList },
   { href: "/payments", label: "Payments", icon: CreditCard },
-  { href: "/feature-request", label: "Requests", icon: Lightbulb },
+  { href: "/profile", label: "Profile", icon: User },
 ]
+
+function getInitials(name?: string): string {
+  if (!name || !name.trim()) return ""
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
+}
 
 export function Header() {
   const pathname = usePathname()
   const router = useRouter()
+  const [tenant, setTenant] = useState<Tenant | null>(null)
+
+  useEffect(() => {
+    getTenant().then(setTenant).catch(() => {})
+  }, [])
 
   const handleLogout = async () => {
     await signOut()
     router.push("/login")
   }
+
+  const initials = getInitials(tenant?.business_name)
 
   return (
     <>
@@ -68,7 +87,7 @@ export function Header() {
               <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/15">
                 <Avatar className="size-7">
                   <AvatarFallback className="bg-white/20 text-white text-xs">
-                    JD
+                    {initials || <User className="size-4" />}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -78,6 +97,12 @@ export function Header() {
                 <Link href="/profile">
                   <User />
                   Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/feature-request">
+                  <Lightbulb />
+                  Feature Requests
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />

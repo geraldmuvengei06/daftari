@@ -33,7 +33,7 @@ interface RecordPaymentModalProps {
 }
 
 function getInitial(customerId?: string) {
-  return { customerId: customerId ?? "", mpesaCode: "", amount: "", status: "confirmed" as string, rawText: "" }
+  return { customerId: customerId ?? "", mpesaCode: "", amount: "", status: "paid" as string, rawText: "", type: "credit" as "credit" | "debit" }
 }
 
 export function RecordPaymentModal({ trigger, customerId, onSuccess }: RecordPaymentModalProps) {
@@ -66,7 +66,7 @@ export function RecordPaymentModal({ trigger, customerId, onSuccess }: RecordPay
         amount: Number(form.amount),
         status: form.status,
         raw_text: form.rawText || undefined,
-        type: "credit",
+        type: form.type,
       })
       setErrors({})
       setOpen(false)
@@ -144,9 +144,24 @@ export function RecordPaymentModal({ trigger, customerId, onSuccess }: RecordPay
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="failed">Failed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="payment-type">Type</Label>
+            <Select
+              value={form.type}
+              onValueChange={(v) => setForm({ ...form, type: v as "credit" | "debit" })}
+            >
+              <SelectTrigger id="payment-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="credit">Credit (received)</SelectItem>
+                <SelectItem value="debit">Debit (paid out)</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -11,13 +11,14 @@ import { StatCard } from "@/components/stat-card"
 import { ProfileCardSkeleton, StatCardSkeleton } from "@/components/skeletons"
 import { getTenant, getProfileStats, signOut } from "@/lib/actions"
 import type { Tenant } from "@/lib/types"
-import { Users, Receipt, TrendingUp, TrendingDown, LogOut } from "lucide-react"
+import { TrendingUp, TrendingDown, Clock, LogOut, User, Users, Receipt } from "lucide-react"
 
 interface Stats {
   totalCustomers: number
   totalTransactions: number
   totalCredits: number
   totalDebits: number
+  moneyOwed: number
 }
 
 export default function ProfilePage() {
@@ -53,7 +54,7 @@ export default function ProfilePage() {
 
   const initials = tenant?.business_name
     ? tenant.business_name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
-    : "??"
+    : ""
 
   return (
     <div className="space-y-6">
@@ -62,7 +63,7 @@ export default function ProfilePage() {
       {loading ? (
         <>
           <ProfileCardSkeleton />
-          <StatCardSkeleton count={4} />
+          <StatCardSkeleton count={3} />
         </>
       ) : (
         <>
@@ -70,7 +71,7 @@ export default function ProfilePage() {
             <CardContent className="flex items-center gap-4 pt-2">
               <Avatar size="lg">
                 <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                  {initials}
+                  {initials || <User className="size-5" />}
                 </AvatarFallback>
               </Avatar>
               <div>
@@ -83,8 +84,12 @@ export default function ProfilePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <StatCard label="Total Customers" value={(stats?.totalCustomers ?? 0).toString()} icon={Users} variant="muted" />
             <StatCard label="Total Transactions" value={(stats?.totalTransactions ?? 0).toString()} icon={Receipt} variant="muted" />
-            <StatCard label="Money In (Credits)" value={`KES ${(stats?.totalCredits ?? 0).toLocaleString()}`} icon={TrendingUp} variant="primary" />
-            <StatCard label="Money Out (Debits)" value={`KES ${(stats?.totalDebits ?? 0).toLocaleString()}`} icon={TrendingDown} variant="destructive" />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <StatCard label="Money In" value={`KES ${(stats?.totalCredits ?? 0).toLocaleString()}`} icon={TrendingUp} variant="primary" />
+            <StatCard label="Money Out" value={`KES ${(stats?.totalDebits ?? 0).toLocaleString()}`} icon={TrendingDown} variant="destructive" />
+            <StatCard label="Money Owed" value={`KES ${(stats?.moneyOwed ?? 0).toLocaleString()}`} icon={Clock} variant="muted" />
           </div>
         </>
       )}

@@ -8,7 +8,7 @@ create table if not exists customers (
 );
 
 -- Transactions table
-create type transaction_status as enum ('confirmed', 'pending', 'failed');
+create type transaction_status as enum ('paid', 'pending', 'failed');
 
 create table if not exists transactions (
   id uuid primary key default gen_random_uuid(),
@@ -16,7 +16,7 @@ create table if not exists transactions (
   customer_id uuid not null references customers(id) on delete cascade,
   mpesa_code text,
   amount numeric not null,
-  status transaction_status not null default 'confirmed',
+  status transaction_status not null default 'paid',
   raw_text text,
   created_at timestamptz not null default now(),
   type text not null default 'credit' check (type in ('credit', 'debit')),

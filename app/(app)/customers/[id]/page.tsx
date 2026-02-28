@@ -3,20 +3,21 @@
 import { use, useState, useEffect, useCallback } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { PageHeader } from "@/components/page-header"
 import { DataTable, type Column } from "@/components/data-table"
 import { RecordPaymentModal } from "@/components/record-payment-modal"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getCustomerById, getTransactionsByCustomerId, getCustomerTotals } from "@/lib/actions"
-import type { Customer, Transaction } from "@/lib/types"
-import { ArrowLeft, CreditCard, Phone, Calendar } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { getCustomerById, getTransactionsByCustomerId, getCustomerTotals, getJobsByCustomerId } from "@/lib/actions"
+import type { Customer, Transaction, JobWithProgress } from "@/lib/types"
+import { ArrowLeft, CreditCard, Phone, Calendar, ClipboardList, Wallet } from "lucide-react"
 import { StatCard } from "@/components/stat-card"
 import { TruncatedText } from "@/components/truncated-text"
 import { CustomerDetailSkeleton } from "@/components/skeletons"
 import { useRealtimeInserts } from "@/lib/use-realtime"
 import { TrendingUp, TrendingDown } from "lucide-react"
+import { CreateJobModal } from "@/components/create-job-modal"
 
 const PER_PAGE = 5
 
@@ -84,7 +85,8 @@ export default function CustomerDetailPage({
   const { id } = use(params)
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [totals, setTotals] = useState({ totalPaid: 0, totalPaidOut: 0 })
+  const [jobs, setJobs] = useState<JobWithProgress[]>([])
+  const [totals, setTotals] = useState({ totalPaid: 0, totalPaidOut: 0, totalJobQuotes: 0, balance: 0 })
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [notFoundState, setNotFoundState] = useState(false)
@@ -94,12 +96,14 @@ export default function CustomerDetailPage({
       const c = await getCustomerById(id)
       if (!c) { setNotFoundState(true); return }
       setCustomer(c)
-      const [txns, t] = await Promise.all([
+      const [txns, t, j] = await Promise.all([
         getTransactionsByCustomerId(id),
         getCustomerTotals(id),
+        getJobsByCustomerId(id),
       ])
       setTransactions(txns)
       setTotals(t)
+      setJobs(j)
     } catch (err) {
       console.error("Failed to load customer:", err)
     } finally {
@@ -108,14 +112,10 @@ export default function CustomerDetailPage({
   }, [id])
 
   useEffect(() => { fetchData() }, [fetchData])
-
-  // Realtime: auto-refresh when new transactions for this customer arrive
   useRealtimeInserts("transactions", fetchData, "customer_id", id)
 
   if (notFoundState) return notFound()
-  if (loading || !customer) {
-    return <CustomerDetailSkeleton />
-  }
+  if (loading || !customer) return <CustomerDetailSkeleton />
 
   const { data, totalPages } = paginate(transactions, page, PER_PAGE)
 
@@ -140,36 +140,119 @@ export default function CustomerDetailPage({
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total Paid" value={`KES ${totals.totalPaid.toLocaleString()}`} icon={TrendingUp} variant="primary" />
         <StatCard label="Total Paid Out" value={`KES ${totals.totalPaidOut.toLocaleString()}`} icon={TrendingDown} variant="destructive" />
+        <StatCard
+          label={totals.balance > 0 ? "Owes You" : totals.balance < 0 ? "Credit Balance" : "Balance"}
+          value={totals.balance === 0 && totals.totalJobQuotes === 0 ? "—" : `KES ${Math.abs(totals.balance).toLocaleString()}`}
+          icon={Wallet}
+          variant={totals.balance > 0 ? "destructive" : totals.balance < 0 ? "primary" : "muted"}
+        />
       </div>
 
-      <PageHeader
-        title="Payments"
-        subtitle={`${transactions.length} transaction${transactions.length !== 1 ? "s" : ""}`}
-        action={
-          <RecordPaymentModal
-            customerId={customer.id}
-            trigger={
-              <Button>
-                <CreditCard />
-                Record Payment
-              </Button>
-            }
-            onSuccess={fetchData}
-          />
-        }
-      />
+      <Tabs defaultValue="jobs">
+        <TabsList>
+          <TabsTrigger value="jobs">
+            <ClipboardList className="size-4" />
+            Job Cards ({jobs.length})
+          </TabsTrigger>
+          <TabsTrigger value="payments">
+            <CreditCard className="size-4" />
+            Payments ({transactions.length})
+          </TabsTrigger>
+        </TabsList>
 
-      <DataTable
-        columns={paymentColumns}
-        data={data}
-        page={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        emptyMessage="No payments recorded yet."
-      />
+        <TabsContent value="jobs">
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {jobs.length === 0 ? "No job cards yet" : `${jobs.filter(j => j.status === "open").length} open, ${jobs.filter(j => j.status === "closed").length} closed`}
+              </p>
+              <CreateJobModal
+                customerId={customer.id}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <ClipboardList />
+                    New Job
+                  </Button>
+                }
+                onSuccess={fetchData}
+              />
+            </div>
+            {jobs.length > 0 && (
+              <div className="grid gap-3">
+                {jobs.map((job) => {
+                  const pct = Number(job.total_quote) > 0
+                    ? Math.min(100, Math.round((job.total_paid / Number(job.total_quote)) * 100))
+                    : 0
+                  return (
+                    <Card key={job.id}>
+                      <CardContent className="px-4 py-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium">{job.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Quote: KES {Number(job.total_quote).toLocaleString()}
+                            </p>
+                          </div>
+                          <Badge variant={job.status === "open" ? "default" : "secondary"}>
+                            {job.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-green-500" : "bg-primary"}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            KES {job.total_paid.toLocaleString()} / {Number(job.total_quote).toLocaleString()} ({pct}%)
+                          </span>
+                        </div>
+                        {job.balance > 0 && (
+                          <p className="text-xs text-destructive">
+                            Balance: KES {job.balance.toLocaleString()}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="payments">
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {transactions.length} transaction{transactions.length !== 1 ? "s" : ""}
+              </p>
+              <RecordPaymentModal
+                customerId={customer.id}
+                trigger={
+                  <Button size="sm">
+                    <CreditCard />
+                    Record Payment
+                  </Button>
+                }
+                onSuccess={fetchData}
+              />
+            </div>
+            <DataTable
+              columns={paymentColumns}
+              data={data}
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              emptyMessage="No payments recorded yet."
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
