@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { getTransactions } from "@/lib/actions"
 import type { TransactionWithCustomer } from "@/lib/types"
+import { useRealtimeInserts } from "@/lib/use-realtime"
 import { TableSkeleton } from "@/components/skeletons"
 import { CreditCard } from "lucide-react"
 
@@ -109,6 +110,9 @@ export default function PaymentsPage() {
   useEffect(() => {
     fetchTransactions()
   }, [fetchTransactions])
+
+  // Realtime: auto-refresh when new transactions arrive
+  useRealtimeInserts("transactions", fetchTransactions)
 
   const { data, totalPages } = paginate(transactions, page, PER_PAGE)
 

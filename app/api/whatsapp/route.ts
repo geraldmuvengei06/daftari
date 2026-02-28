@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase"
 
 function twimlResponse(message: string) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -20,6 +20,11 @@ export async function POST(request: NextRequest) {
 
         if (!message_text || !tenant_phone) {
             return twimlResponse("⚠️ Message haikueleweka. Tafadhali tuma tena.")
+        }
+
+        // Early detection for Fuliza and other non-P2P messages
+        if (/Fuliza\s+M-PESA/i.test(message_text)) {
+            return twimlResponse("ℹ️ Fuliza payments hazirekodiwa kwa sasa.")
         }
 
         // Detect transaction type
@@ -63,7 +68,7 @@ export async function POST(request: NextRequest) {
         const txType = isDebit ? 'debit' : 'credit';
 
         // Check for duplicate mpesa code
-        const { data: existing } = await supabase
+        const { data: existing } = await supabaseAdmin
             .from('transactions')
             .select('id')
             .eq('mpesa_code', code)
@@ -74,7 +79,7 @@ export async function POST(request: NextRequest) {
         }
 
         // upsert tenant
-        const { data: tenant, error: tenantError } = await supabase
+        const { data: tenant, error: tenantError } = await supabaseAdmin
             .from("tenants")
             .upsert({ owner_phone: tenant_phone }, { onConflict: 'owner_phone' })
             .select("id")
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest) {
         }
 
         // upsert customer
-        const { data: customer, error: customerError } = await supabase
+        const { data: customer, error: customerError } = await supabaseAdmin
             .from('customers')
             .upsert({ phone: customer_phone, name: customer_name, tenant_id: tenant.id }, { onConflict: "phone,tenant_id" })
             .select("id")
@@ -98,7 +103,7 @@ export async function POST(request: NextRequest) {
         }
 
         // insert transaction
-        const { error: txError } = await supabase
+        const { error: txError } = await supabaseAdmin
             .from('transactions')
             .insert({ mpesa_code: code, amount, type: txType, status: 'paid', raw_text: message_text, tenant_id: tenant.id, customer_id: customer.id, transaction_date })
 

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
+import { signOut } from "@/lib/actions"
 import { CreditCard, Lightbulb, LogOut, User, Users } from "lucide-react"
 
 const topNavLinks = [
@@ -30,6 +31,12 @@ const mobileTabLinks = [
 
 export function Header() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    await signOut()
+    router.push("/login")
+  }
 
   return (
     <>
@@ -74,7 +81,7 @@ export function Header() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive">
+              <DropdownMenuItem variant="destructive" onClick={handleLogout}>
                 <LogOut />
                 Logout
               </DropdownMenuItem>

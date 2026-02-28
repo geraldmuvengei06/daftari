@@ -15,6 +15,7 @@ import { ArrowLeft, CreditCard, Phone, Calendar } from "lucide-react"
 import { StatCard } from "@/components/stat-card"
 import { TruncatedText } from "@/components/truncated-text"
 import { CustomerDetailSkeleton } from "@/components/skeletons"
+import { useRealtimeInserts } from "@/lib/use-realtime"
 import { TrendingUp, TrendingDown } from "lucide-react"
 
 const PER_PAGE = 5
@@ -107,6 +108,9 @@ export default function CustomerDetailPage({
   }, [id])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Realtime: auto-refresh when new transactions for this customer arrive
+  useRealtimeInserts("transactions", fetchData, "customer_id", id)
 
   if (notFoundState) return notFound()
   if (loading || !customer) {

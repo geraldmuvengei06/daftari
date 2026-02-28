@@ -8,6 +8,7 @@ import { AddCustomerModal } from "@/components/add-customer-modal"
 import { Button } from "@/components/ui/button"
 import { getCustomers } from "@/lib/actions"
 import type { Customer } from "@/lib/types"
+import { useRealtimeInserts } from "@/lib/use-realtime"
 import { TableSkeleton } from "@/components/skeletons"
 import { Plus } from "lucide-react"
 
@@ -67,6 +68,9 @@ export default function CustomersPage() {
   useEffect(() => {
     fetchCustomers()
   }, [fetchCustomers])
+
+  // Realtime: auto-refresh when new customers are added
+  useRealtimeInserts("customers", fetchCustomers)
 
   const { data, totalPages } = paginate(customers, page, PER_PAGE)
 

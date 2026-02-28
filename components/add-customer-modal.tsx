@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { addCustomerSchema, getFieldErrors, type FieldErrors } from "@/lib/validations"
 import { createCustomer } from "@/lib/actions"
+import { PhoneInput } from "@/components/phone-input"
 
 interface AddCustomerModalProps {
   trigger: React.ReactNode
@@ -73,12 +74,10 @@ export function AddCustomerModal({ trigger, onSuccess }: AddCustomerModalProps) 
           </div>
           <div className="space-y-2">
             <Label htmlFor="customer-phone">Phone</Label>
-            <Input
+            <PhoneInput
               id="customer-phone"
-              type="tel"
-              placeholder="+254712345678"
               value={form.phone}
-              onChange={(e) => { setForm({ ...form, phone: e.target.value }); setErrors({ ...errors, phone: undefined }) }}
+              onChange={(v) => { setForm({ ...form, phone: v }); setErrors({ ...errors, phone: undefined }) }}
               aria-invalid={!!errors.phone}
             />
             <FieldError message={errors.phone} />

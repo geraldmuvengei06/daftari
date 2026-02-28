@@ -1,5 +1,14 @@
+export interface Tenant {
+  id: string
+  user_id: string
+  owner_phone: string
+  business_name: string
+  created_at: string
+}
+
 export interface Customer {
   id: string
+  tenant_id: string
   name: string
   phone: string
   created_at: string

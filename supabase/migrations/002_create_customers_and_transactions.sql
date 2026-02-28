@@ -1,7 +1,7 @@
 -- Customers table
 create table if not exists customers (
   id uuid primary key default gen_random_uuid(),
-  tenant_id uuid,
+  tenant_id uuid not null references tenants(id) on delete cascade,
   name text not null,
   phone text not null,
   created_at timestamptz not null default now()
@@ -12,7 +12,7 @@ create type transaction_status as enum ('confirmed', 'pending', 'failed');
 
 create table if not exists transactions (
   id uuid primary key default gen_random_uuid(),
-  tenant_id uuid,
+  tenant_id uuid not null references tenants(id) on delete cascade,
   customer_id uuid not null references customers(id) on delete cascade,
   mpesa_code text,
   amount numeric not null,
