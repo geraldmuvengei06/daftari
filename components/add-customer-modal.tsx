@@ -15,28 +15,40 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { addCustomerSchema, getFieldErrors, type FieldErrors } from "@/lib/validations"
+import { createCustomer } from "@/lib/actions"
 
 interface AddCustomerModalProps {
   trigger: React.ReactNode
+  onSuccess?: () => void
 }
 
 const initial = { name: "", phone: "" }
 
-export function AddCustomerModal({ trigger }: AddCustomerModalProps) {
+export function AddCustomerModal({ trigger, onSuccess }: AddCustomerModalProps) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(initial)
   const [errors, setErrors] = useState<FieldErrors>({})
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const result = addCustomerSchema.safeParse(form)
     if (!result.success) {
       setErrors(getFieldErrors(result.error))
       return
     }
-    setErrors({})
-    setOpen(false)
-    setForm(initial)
+    setSubmitting(true)
+    try {
+      await createCustomer({ name: form.name, phone: form.phone })
+      setErrors({})
+      setOpen(false)
+      setForm(initial)
+      onSuccess?.()
+    } catch {
+      setErrors({ name: "Failed to add customer. Please try again." })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -72,7 +84,9 @@ export function AddCustomerModal({ trigger }: AddCustomerModalProps) {
             <FieldError message={errors.phone} />
           </div>
           <DialogFooter>
-            <Button type="submit">Add Customer</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Adding…" : "Add Customer"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

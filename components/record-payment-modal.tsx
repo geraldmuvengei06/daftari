@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,35 +22,61 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { customers } from "@/lib/mock-data"
+import { getCustomers, createTransaction } from "@/lib/actions"
+import type { Customer } from "@/lib/types"
 import { recordPaymentSchema, getFieldErrors, type FieldErrors } from "@/lib/validations"
 
 interface RecordPaymentModalProps {
   trigger: React.ReactNode
   customerId?: string
+  onSuccess?: () => void
 }
 
 function getInitial(customerId?: string) {
   return { customerId: customerId ?? "", mpesaCode: "", amount: "", status: "confirmed" as string, rawText: "" }
 }
 
-export function RecordPaymentModal({ trigger, customerId }: RecordPaymentModalProps) {
+export function RecordPaymentModal({ trigger, customerId, onSuccess }: RecordPaymentModalProps) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(getInitial(customerId))
   const [errors, setErrors] = useState<FieldErrors>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [customers, setCustomers] = useState<Customer[]>([])
+
+  useEffect(() => {
+    if (!customerId) {
+      getCustomers().then(setCustomers).catch(console.error)
+    }
+  }, [customerId])
 
   const clearField = (key: string) => setErrors((prev) => ({ ...prev, [key]: undefined }))
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const result = recordPaymentSchema.safeParse(form)
     if (!result.success) {
       setErrors(getFieldErrors(result.error))
       return
     }
-    setErrors({})
-    setOpen(false)
-    setForm(getInitial(customerId))
+    setSubmitting(true)
+    try {
+      await createTransaction({
+        customer_id: form.customerId,
+        mpesa_code: form.mpesaCode,
+        amount: Number(form.amount),
+        status: form.status,
+        raw_text: form.rawText || undefined,
+        type: "credit",
+      })
+      setErrors({})
+      setOpen(false)
+      setForm(getInitial(customerId))
+      onSuccess?.()
+    } catch {
+      setErrors({ amount: "Failed to record payment. Please try again." })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -134,7 +160,9 @@ export function RecordPaymentModal({ trigger, customerId }: RecordPaymentModalPr
             />
           </div>
           <DialogFooter>
-            <Button type="submit">Record Payment</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Recording…" : "Record Payment"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

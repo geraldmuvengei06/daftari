@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect, useCallback } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { PageHeader } from "@/components/page-header"
@@ -9,29 +9,39 @@ import { RecordPaymentModal } from "@/components/record-payment-modal"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  getCustomerById,
-  getPaymentsByCustomerId,
-  getCustomerTotals,
-  paginate,
-  formatDateTime,
-  type Payment,
-} from "@/lib/mock-data"
+import { getCustomerById, getTransactionsByCustomerId, getCustomerTotals } from "@/lib/actions"
+import type { Customer, Transaction } from "@/lib/types"
 import { ArrowLeft, CreditCard, Phone, Calendar } from "lucide-react"
 import { StatCard } from "@/components/stat-card"
 import { TruncatedText } from "@/components/truncated-text"
+import { CustomerDetailSkeleton } from "@/components/skeletons"
 import { TrendingUp, TrendingDown } from "lucide-react"
 
 const PER_PAGE = 5
 
-const paymentColumns: Column<Payment>[] = [
+function paginate<T>(items: T[], page: number, perPage: number) {
+  const start = (page - 1) * perPage
+  return {
+    data: items.slice(start, start + perPage),
+    totalPages: Math.ceil(items.length / perPage),
+  }
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-KE", {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true,
+  })
+}
+
+const paymentColumns: Column<Transaction>[] = [
   {
     key: "amount",
     header: "Amount",
     className: "text-right",
     render: (row) => (
       <span className={row.type === "credit" ? "text-primary" : "text-destructive"}>
-        {row.type === "credit" ? "+" : "-"} KES {row.amount.toLocaleString()}
+        {row.type === "credit" ? "+" : "-"} KES {Number(row.amount).toLocaleString()}
       </span>
     ),
   },
@@ -45,23 +55,23 @@ const paymentColumns: Column<Payment>[] = [
     ),
   },
   {
-    key: "date",
+    key: "transaction_date",
     header: "Transaction Date",
-    render: (row) => formatDateTime(row.date),
+    render: (row) => formatDateTime(row.transaction_date),
   },
   {
-    key: "rawText",
+    key: "raw_text",
     header: "Message Content",
     className: "hidden md:table-cell",
     fullRow: true,
-    render: (row) => <TruncatedText text={row.rawText} title="Message Content" />,
+    render: (row) => <TruncatedText text={row.raw_text ?? ""} title="Message Content" />,
   },
   {
-    key: "createdAt",
+    key: "created_at",
     header: "Added On",
     className: "hidden sm:table-cell",
     fullRow: true,
-    render: (row) => formatDateTime(row.createdAt),
+    render: (row) => formatDateTime(row.created_at),
   },
 ]
 
@@ -71,14 +81,39 @@ export default function CustomerDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
-  const customer = getCustomerById(id)
+  const [customer, setCustomer] = useState<Customer | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [totals, setTotals] = useState({ totalPaid: 0, totalPaidOut: 0 })
   const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [notFoundState, setNotFoundState] = useState(false)
 
-  if (!customer) return notFound()
+  const fetchData = useCallback(async () => {
+    try {
+      const c = await getCustomerById(id)
+      if (!c) { setNotFoundState(true); return }
+      setCustomer(c)
+      const [txns, t] = await Promise.all([
+        getTransactionsByCustomerId(id),
+        getCustomerTotals(id),
+      ])
+      setTransactions(txns)
+      setTotals(t)
+    } catch (err) {
+      console.error("Failed to load customer:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
 
-  const allPayments = getPaymentsByCustomerId(customer.id)
-  const { totalPaid, totalPaidOut } = getCustomerTotals(customer.id)
-  const { data, totalPages } = paginate(allPayments, page, PER_PAGE)
+  useEffect(() => { fetchData() }, [fetchData])
+
+  if (notFoundState) return notFound()
+  if (loading || !customer) {
+    return <CustomerDetailSkeleton />
+  }
+
+  const { data, totalPages } = paginate(transactions, page, PER_PAGE)
 
   return (
     <div className="space-y-6">
@@ -96,19 +131,19 @@ export default function CustomerDetailPage({
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2">
             <KycField icon={<Phone className="size-4" />} label="Phone" value={customer.phone} />
-            <KycField icon={<Calendar className="size-4" />} label="Joined" value={customer.createdAt} />
+            <KycField icon={<Calendar className="size-4" />} label="Joined" value={formatDateTime(customer.created_at)} />
           </div>
         </CardContent>
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <StatCard label="Total Paid" value={`KES ${totalPaid.toLocaleString()}`} icon={TrendingUp} variant="primary" />
-        <StatCard label="Total Paid Out" value={`KES ${totalPaidOut.toLocaleString()}`} icon={TrendingDown} variant="destructive" />
+        <StatCard label="Total Paid" value={`KES ${totals.totalPaid.toLocaleString()}`} icon={TrendingUp} variant="primary" />
+        <StatCard label="Total Paid Out" value={`KES ${totals.totalPaidOut.toLocaleString()}`} icon={TrendingDown} variant="destructive" />
       </div>
 
       <PageHeader
         title="Payments"
-        subtitle={`${allPayments.length} transaction${allPayments.length !== 1 ? "s" : ""}`}
+        subtitle={`${transactions.length} transaction${transactions.length !== 1 ? "s" : ""}`}
         action={
           <RecordPaymentModal
             customerId={customer.id}
@@ -118,6 +153,7 @@ export default function CustomerDetailPage({
                 Record Payment
               </Button>
             }
+            onSuccess={fetchData}
           />
         }
       />
