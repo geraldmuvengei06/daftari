@@ -1,10 +1,10 @@
-"use client"
+'use client'
 
-import { useState, useEffect, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { FieldError } from "@/components/field-error"
-import { PhoneInput } from "@/components/phone-input"
+import { useState, useEffect, useCallback } from 'react'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { FieldError } from '@/components/field-error'
+import { PhoneInput } from '@/components/phone-input'
 import {
   Dialog,
   DialogContent,
@@ -12,14 +12,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Phone } from "lucide-react"
-import { loginPhoneSchema, getFieldErrors, type FieldErrors } from "@/lib/validations"
-import { getTenant, updateTenantPhone } from "@/lib/actions"
+} from '@/components/ui/dialog'
+import { Phone } from 'lucide-react'
+import { loginPhoneSchema, getFieldErrors, type FieldErrors } from '@/lib/validations'
+import { getTenant, updateTenantPhone } from '@/lib/actions'
 
 export function SetupPhoneModal() {
   const [open, setOpen] = useState(false)
-  const [phone, setPhone] = useState("")
+  const [phone, setPhone] = useState('')
   const [errors, setErrors] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(false)
 
@@ -34,19 +34,24 @@ export function SetupPhoneModal() {
     }
   }, [])
 
-  useEffect(() => { checkPhone() }, [checkPhone])
+  useEffect(() => {
+    checkPhone()
+  }, [checkPhone])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const result = loginPhoneSchema.safeParse({ phone })
-    if (!result.success) { setErrors(getFieldErrors(result.error)); return }
+    if (!result.success) {
+      setErrors(getFieldErrors(result.error))
+      return
+    }
     setLoading(true)
     setErrors({})
     try {
       await updateTenantPhone(phone)
       setOpen(false)
     } catch (err) {
-      setErrors({ phone: err instanceof Error ? err.message : "Failed to save. Please try again." })
+      setErrors({ phone: err instanceof Error ? err.message : 'Failed to save. Please try again.' })
     } finally {
       setLoading(false)
     }
@@ -62,12 +67,13 @@ export function SetupPhoneModal() {
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-primary/10">
-            <Phone className="size-5 text-primary" />
+          <div className="bg-primary/10 mx-auto flex size-10 items-center justify-center rounded-full">
+            <Phone className="text-primary size-5" />
           </div>
           <DialogTitle className="text-center">Set up your M-Pesa number</DialogTitle>
           <DialogDescription className="text-center">
-            We need your M-Pesa phone number to match incoming payment messages to your account. This is the number you use to send and receive M-Pesa transactions.
+            We need your M-Pesa phone number to match incoming payment messages to your account.
+            This is the number you use to send and receive M-Pesa transactions.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -76,7 +82,10 @@ export function SetupPhoneModal() {
             <PhoneInput
               id="setup-mpesa-phone"
               value={phone}
-              onChange={(v) => { setPhone(v); setErrors({ ...errors, phone: undefined }) }}
+              onChange={(v) => {
+                setPhone(v)
+                setErrors({ ...errors, phone: undefined })
+              }}
               aria-invalid={!!errors.phone}
               autoFocus
             />
@@ -84,7 +93,7 @@ export function SetupPhoneModal() {
           </div>
           <DialogFooter>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Saving…" : "Continue"}
+              {loading ? 'Saving…' : 'Continue'}
             </Button>
           </DialogFooter>
         </form>

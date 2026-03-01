@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from '@supabase/supabase-js'
 
 // Server-side admin client — bypasses RLS.
 // Only use in server actions / route handlers.

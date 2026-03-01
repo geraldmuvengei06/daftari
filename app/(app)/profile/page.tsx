@@ -1,17 +1,17 @@
-"use client"
+'use client'
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { PageHeader } from "@/components/page-header"
-import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
-import { Button } from "@/components/ui/button"
-import { StatCard } from "@/components/stat-card"
-import { ProfileCardSkeleton, StatCardSkeleton } from "@/components/skeletons"
-import { getTenant, getProfileStats, signOut } from "@/lib/actions"
-import type { Tenant } from "@/lib/types"
-import { TrendingUp, TrendingDown, Clock, LogOut, User, Users, Receipt } from "lucide-react"
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
+import { Card, CardContent } from '@/components/ui/card'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Separator } from '@/components/ui/separator'
+import { Button } from '@/components/ui/button'
+import { StatCard } from '@/components/stat-card'
+import { ProfileCardSkeleton, StatCardSkeleton } from '@/components/skeletons'
+import { getTenant, getProfileStats, signOut } from '@/lib/actions'
+import type { Tenant } from '@/lib/types'
+import { TrendingUp, TrendingDown, Clock, LogOut, User, Users, Receipt } from 'lucide-react'
 
 interface Stats {
   totalCustomers: number
@@ -34,27 +34,34 @@ export default function ProfilePage() {
       setTenant(t)
       setStats(s)
     } catch (err) {
-      console.error("Failed to load profile:", err)
+      console.error('Failed to load profile:', err)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   const handleLogout = async () => {
     setLoggingOut(true)
     try {
       await signOut()
-      router.push("/login")
+      router.push('/login')
     } catch {
       setLoggingOut(false)
     }
   }
 
   const initials = tenant?.business_name
-    ? tenant.business_name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
-    : ""
+    ? tenant.business_name
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : ''
 
   return (
     <div className="space-y-6">
@@ -76,29 +83,59 @@ export default function ProfilePage() {
               </Avatar>
               <div>
                 <p className="font-semibold">{tenant?.business_name}</p>
-                <p className="text-sm text-muted-foreground">{tenant?.owner_phone || "No phone"}</p>
+                <p className="text-muted-foreground text-sm">{tenant?.owner_phone || 'No phone'}</p>
               </div>
             </CardContent>
           </Card>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <StatCard label="Total Customers" value={(stats?.totalCustomers ?? 0).toString()} icon={Users} variant="muted" />
-            <StatCard label="Total Transactions" value={(stats?.totalTransactions ?? 0).toString()} icon={Receipt} variant="muted" />
+            <StatCard
+              label="Total Customers"
+              value={(stats?.totalCustomers ?? 0).toString()}
+              icon={Users}
+              variant="muted"
+            />
+            <StatCard
+              label="Total Transactions"
+              value={(stats?.totalTransactions ?? 0).toString()}
+              icon={Receipt}
+              variant="muted"
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard label="Money In" value={`KES ${(stats?.totalCredits ?? 0).toLocaleString()}`} icon={TrendingUp} variant="primary" />
-            <StatCard label="Money Out" value={`KES ${(stats?.totalDebits ?? 0).toLocaleString()}`} icon={TrendingDown} variant="destructive" />
-            <StatCard label="Money Owed" value={`KES ${(stats?.moneyOwed ?? 0).toLocaleString()}`} icon={Clock} variant="muted" />
+            <StatCard
+              label="Money In"
+              value={`KES ${(stats?.totalCredits ?? 0).toLocaleString()}`}
+              icon={TrendingUp}
+              variant="primary"
+            />
+            <StatCard
+              label="Money Out"
+              value={`KES ${(stats?.totalDebits ?? 0).toLocaleString()}`}
+              icon={TrendingDown}
+              variant="destructive"
+            />
+            <StatCard
+              label="Money Owed"
+              value={`KES ${(stats?.moneyOwed ?? 0).toLocaleString()}`}
+              icon={Clock}
+              variant="muted"
+            />
           </div>
         </>
       )}
 
       <Separator />
 
-      <Button variant="destructive" className="w-full sm:w-auto" onClick={handleLogout} disabled={loggingOut}>
+      <Button
+        variant="destructive"
+        className="w-full sm:w-auto"
+        onClick={handleLogout}
+        disabled={loggingOut}
+      >
         <LogOut />
-        {loggingOut ? "Logging out…" : "Logout"}
+        {loggingOut ? 'Logging out…' : 'Logout'}
       </Button>
     </div>
   )

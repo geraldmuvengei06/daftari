@@ -1,8 +1,8 @@
-"use client"
+'use client'
 
-import { useEffect, useRef } from "react"
-import { createSupabaseBrowser } from "./supabase-browser"
-import { getCurrentTenantId } from "./actions"
+import { useEffect, useRef } from 'react'
+import { createSupabaseBrowser } from './supabase-browser'
+import { getCurrentTenantId } from './actions'
 
 /**
  * Subscribes to INSERT events on a table, filtered by tenant_id.
@@ -16,7 +16,9 @@ export function useRealtimeInserts(
   filterValue?: string
 ) {
   const onInsertRef = useRef(onInsert)
-  onInsertRef.current = onInsert
+  useEffect(() => {
+    onInsertRef.current = onInsert
+  })
 
   useEffect(() => {
     const supabase = createSupabaseBrowser()
@@ -26,9 +28,10 @@ export function useRealtimeInserts(
     getCurrentTenantId().then((tenantId) => {
       if (cancelled) return
 
-      const filter = filterColumn && filterValue
-        ? `tenant_id=eq.${tenantId},${filterColumn}=eq.${filterValue}`
-        : `tenant_id=eq.${tenantId}`
+      const filter =
+        filterColumn && filterValue
+          ? `tenant_id=eq.${tenantId},${filterColumn}=eq.${filterValue}`
+          : `tenant_id=eq.${tenantId}`
 
       const channelName = filterValue
         ? `${table}-${tenantId}-${filterValue}`
@@ -36,10 +39,8 @@ export function useRealtimeInserts(
 
       const channel = supabase
         .channel(channelName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table, filter },
-          () => onInsertRef.current()
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, () =>
+          onInsertRef.current()
         )
         .subscribe()
 
