@@ -17,12 +17,12 @@ const styles = {
     label: 'text-primary/60',
   },
   destructive: {
-    bg: 'bg-linear-to-r from-red-50 to-transparent',
-    iconBg: 'bg-red-100',
-    iconColor: 'text-red-600',
-    watermark: 'text-red-200/30',
-    value: 'text-red-700',
-    label: 'text-red-600/70',
+    bg: 'bg-linear-to-r from-destructive/10 to-transparent',
+    iconBg: 'bg-destructive/10',
+    iconColor: 'text-destructive',
+    watermark: 'text-destructive/10',
+    value: 'text-destructive',
+    label: 'text-destructive/70',
   },
   muted: {
     bg: 'bg-linear-to-r from-muted to-transparent',

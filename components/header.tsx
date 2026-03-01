@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { signOut, getTenant } from '@/lib/actions'
 import type { Tenant } from '@/lib/types'
 import { ClipboardList, CreditCard, Lightbulb, LogOut, User, Users } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 const topNavLinks = [
   { href: '/customers', label: 'Customers', icon: Users },
@@ -84,36 +85,39 @@ export function Header() {
             ))}
           </nav>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/15">
-                <Avatar className="size-7">
-                  <AvatarFallback className="bg-white/20 text-xs text-white">
-                    {initials || <User className="size-4" />}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem asChild>
-                <Link href="/profile">
-                  <User />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/feature-request">
-                  <Lightbulb />
-                  Feature Requests
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={handleLogout}>
-                <LogOut />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/15">
+                  <Avatar className="size-7">
+                    <AvatarFallback className="bg-white/20 text-xs text-white">
+                      {initials || <User className="size-4" />}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">
+                    <User />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/feature-request">
+                    <Lightbulb />
+                    Feature Requests
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={handleLogout}>
+                  <LogOut />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 

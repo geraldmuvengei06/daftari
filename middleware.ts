@@ -4,6 +4,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
+  // Skip auth check for RSC/prefetch requests — they carry cookies already
+  // and don't need a round-trip to Supabase on every navigation prefetch.
+  const isRSC =
+    request.headers.has('next-router-state-tree') || request.nextUrl.searchParams.has('_rsc')
+  if (isRSC) return supabaseResponse
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
@@ -48,6 +54,10 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|api/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /*
+     * Only run on page navigations — skip static assets, RSC payloads,
+     * prefetches, api routes, and auth routes.
+     */
+    '/((?!_next/static|_next/image|_next/data|api/|auth/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

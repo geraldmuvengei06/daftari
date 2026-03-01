@@ -19,6 +19,7 @@ import {
 import { createSupabaseBrowser } from '@/lib/supabase-browser'
 import { ensureTenant } from '@/lib/actions'
 import { PhoneInput } from '@/components/phone-input'
+import features from '@/features.json'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -52,7 +53,6 @@ export default function LoginPage() {
       .setSession({ access_token: accessToken, refresh_token: refreshToken })
       .then(async ({ data: { session }, error }) => {
         if (session && !error) {
-          // Clear the hash from the URL
           window.history.replaceState(null, '', window.location.pathname)
           try {
             await ensureTenant('')
@@ -226,6 +226,50 @@ export default function LoginPage() {
     )
   }
 
+  // Email-only login (phone feature disabled)
+  if (!features.phoneLogin) {
+    return (
+      <div className="flex min-h-svh items-center justify-center px-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="text-center">
+            <div className="mb-2 flex justify-center">
+              <Logo className="text-2xl" />
+            </div>
+            <CardTitle>Welcome back</CardTitle>
+            <CardDescription>Sign in to your account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleEmail} className="space-y-4" noValidate>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email address</Label>
+                <div className="relative">
+                  <Mail className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      setErrors({ ...errors, email: undefined })
+                    }}
+                    className="pl-8"
+                    aria-invalid={!!errors.email}
+                  />
+                </div>
+                <FieldError message={errors.email} />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Sending…' : 'Send magic link'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Phone + Email tabs (phone feature enabled)
   return (
     <div className="flex min-h-svh items-center justify-center px-4">
       <Card className="w-full max-w-sm">
@@ -278,9 +322,6 @@ export default function LoginPage() {
 
             <TabsContent value="phone">
               <form onSubmit={handlePhone} className="space-y-4 pt-2" noValidate>
-                <p className="text-muted-foreground text-xs">
-                  Phone login requires an SMS provider. Use email for now.
-                </p>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone number</Label>
                   <PhoneInput

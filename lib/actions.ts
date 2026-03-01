@@ -1,5 +1,6 @@
 'use server'
 
+import { cache } from 'react'
 import { supabaseAdmin } from './supabase'
 import { createSupabaseServer } from './supabase-server'
 import type {
@@ -14,8 +15,10 @@ import type {
 } from './types'
 
 // ─── Auth helpers ───
+// cache() memoizes per-request — getUser/getTenantId only hit the network
+// once per server render no matter how many actions call them.
 
-async function getUser() {
+const getUser = cache(async () => {
   const supabase = await createSupabaseServer()
   const {
     data: { user },
@@ -23,10 +26,16 @@ async function getUser() {
   } = await supabase.auth.getUser()
   if (error || !user) throw new Error('Not authenticated')
   return user
-}
+})
 
-async function getTenantId(): Promise<string> {
+const getTenantId = cache(async (): Promise<string> => {
   const user = await getUser()
+
+  // Fast path: tenant_id embedded in JWT by custom_access_token_hook
+  const fromJwt = user.app_metadata?.tenant_id as string | undefined
+  if (fromJwt) return fromJwt
+
+  // Fallback: DB lookup (runs before hook is active or on first login)
   const { data } = await supabaseAdmin.from('tenants').select('id').eq('user_id', user.id).single()
   if (data) return data.id
 
@@ -43,7 +52,7 @@ async function getTenantId(): Promise<string> {
     .single()
   if (error || !created) throw new Error('Failed to create tenant')
   return created.id
-}
+})
 
 export async function getTenant(): Promise<Tenant> {
   const tenantId = await getTenantId()
@@ -502,4 +511,83 @@ export async function signOut() {
 
 export async function getCurrentTenantId() {
   return getTenantId()
+}
+
+// ─── Batched page loaders ───
+
+export async function getCustomerPageData(customerId: string) {
+  const tenantId = await getTenantId()
+
+  // All queries in parallel — single auth + tenant lookup
+  const [customer, transactions, jobsRaw] = await Promise.all([
+    supabaseAdmin
+      .from('customers')
+      .select('*')
+      .eq('id', customerId)
+      .eq('tenant_id', tenantId)
+      .single()
+      .then((r) => r.data as Customer | null),
+
+    supabaseAdmin
+      .from('transactions')
+      .select('*')
+      .eq('customer_id', customerId)
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .then((r) => (r.data ?? []) as Transaction[]),
+
+    supabaseAdmin
+      .from('jobs')
+      .select('*, customers(name, phone)')
+      .eq('customer_id', customerId)
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: true })
+      .then((r) => (r.data ?? []) as JobWithCustomer[]),
+  ])
+
+  if (!customer) return null
+
+  // Compute totals from already-fetched transactions
+  const totalPaid = transactions
+    .filter((t) => t.type === 'credit')
+    .reduce((s, t) => s + Number(t.amount), 0)
+  const totalPaidOut = transactions
+    .filter((t) => t.type === 'debit')
+    .reduce((s, t) => s + Number(t.amount), 0)
+
+  const { data: openJobs } = await supabaseAdmin
+    .from('jobs')
+    .select('total_quote')
+    .eq('customer_id', customerId)
+    .eq('tenant_id', tenantId)
+    .eq('status', 'open')
+
+  const totalJobQuotes = (openJobs ?? []).reduce((s, j) => s + Number(j.total_quote), 0)
+  const balance = totalJobQuotes - (totalPaid - totalPaidOut)
+
+  // Compute job progress from already-fetched transactions
+  let wallet = Math.max(0, totalPaid - totalPaidOut)
+  const openJobsList = jobsRaw.filter((j) => j.status === 'open')
+  const paidMap: Record<string, number> = {}
+  for (const j of openJobsList) {
+    const quote = Number(j.total_quote)
+    const applied = Math.min(wallet, quote)
+    wallet -= applied
+    paidMap[j.id] = applied
+  }
+  const jobs: JobWithProgress[] = jobsRaw
+    .map((j) => ({
+      ...j,
+      total_paid: paidMap[j.id] || 0,
+      balance:
+        j.status === 'closed' ? 0 : Math.max(0, Number(j.total_quote) - (paidMap[j.id] || 0)),
+    }))
+    .reverse()
+
+  return {
+    customer,
+    transactions,
+    jobs,
+    totals: { totalPaid, totalPaidOut, totalJobQuotes, balance },
+  }
 }
