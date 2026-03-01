@@ -1,18 +1,18 @@
-"use client"
+'use client'
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { FieldError } from "@/components/field-error"
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { FieldError } from '@/components/field-error'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -21,10 +21,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { getCustomers, createJob } from "@/lib/actions"
-import type { Customer } from "@/lib/types"
-import { createJobSchema, getFieldErrors, type FieldErrors } from "@/lib/validations"
+} from '@/components/ui/dialog'
+import { getCustomers, createJob } from '@/lib/actions'
+import type { Customer } from '@/lib/types'
+import { createJobSchema, getFieldErrors, type FieldErrors } from '@/lib/validations'
 
 interface CreateJobModalProps {
   trigger: React.ReactNode
@@ -33,7 +33,7 @@ interface CreateJobModalProps {
 }
 
 function getInitial(customerId?: string) {
-  return { customerId: customerId ?? "", description: "", totalQuote: "" }
+  return { customerId: customerId ?? '', description: '', totalQuote: '' }
 }
 
 export function CreateJobModal({ trigger, customerId, onSuccess }: CreateJobModalProps) {
@@ -70,14 +70,23 @@ export function CreateJobModal({ trigger, customerId, onSuccess }: CreateJobModa
       setForm(getInitial(customerId))
       onSuccess?.()
     } catch {
-      setErrors({ totalQuote: "Failed to create job. Please try again." })
+      setErrors({ totalQuote: 'Failed to create job. Please try again.' })
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setErrors({}); setForm(getInitial(customerId)) } }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v)
+        if (!v) {
+          setErrors({})
+          setForm(getInitial(customerId))
+        }
+      }}
+    >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -90,9 +99,16 @@ export function CreateJobModal({ trigger, customerId, onSuccess }: CreateJobModa
               <Label htmlFor="job-customer">Customer</Label>
               <Select
                 value={form.customerId}
-                onValueChange={(v) => { setForm({ ...form, customerId: v }); clearField("customerId") }}
+                onValueChange={(v) => {
+                  setForm({ ...form, customerId: v })
+                  clearField('customerId')
+                }}
               >
-                <SelectTrigger id="job-customer" className="w-full" aria-invalid={!!errors.customerId}>
+                <SelectTrigger
+                  id="job-customer"
+                  className="w-full"
+                  aria-invalid={!!errors.customerId}
+                >
                   <SelectValue placeholder="Select customer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -115,7 +131,10 @@ export function CreateJobModal({ trigger, customerId, onSuccess }: CreateJobModa
               step="0.01"
               placeholder="e.g. 2000"
               value={form.totalQuote}
-              onChange={(e) => { setForm({ ...form, totalQuote: e.target.value }); clearField("totalQuote") }}
+              onChange={(e) => {
+                setForm({ ...form, totalQuote: e.target.value })
+                clearField('totalQuote')
+              }}
               aria-invalid={!!errors.totalQuote}
             />
             <FieldError message={errors.totalQuote} />
@@ -126,14 +145,17 @@ export function CreateJobModal({ trigger, customerId, onSuccess }: CreateJobModa
               id="job-desc"
               placeholder="e.g. Print 100 business cards"
               value={form.description}
-              onChange={(e) => { setForm({ ...form, description: e.target.value }); clearField("description") }}
+              onChange={(e) => {
+                setForm({ ...form, description: e.target.value })
+                clearField('description')
+              }}
               aria-invalid={!!errors.description}
             />
             <FieldError message={errors.description} />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating…" : "Create Job Card"}
+              {submitting ? 'Creating…' : 'Create Job Card'}
             </Button>
           </DialogFooter>
         </form>

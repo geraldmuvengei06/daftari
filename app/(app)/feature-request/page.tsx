@@ -1,28 +1,28 @@
-"use client"
+'use client'
 
-import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { FieldError } from "@/components/field-error"
-import { FeatureRequestListSkeleton } from "@/components/skeletons"
-import { Lightbulb, Send } from "lucide-react"
-import { featureRequestSchema, getFieldErrors, type FieldErrors } from "@/lib/validations"
-import { createFeatureRequest, getFeatureRequests } from "@/lib/actions"
-import type { FeatureRequest } from "@/lib/types"
+import { useState, useEffect, useCallback } from 'react'
+import { PageHeader } from '@/components/page-header'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { FieldError } from '@/components/field-error'
+import { FeatureRequestListSkeleton } from '@/components/skeletons'
+import { Lightbulb, Send } from 'lucide-react'
+import { featureRequestSchema, getFieldErrors, type FieldErrors } from '@/lib/validations'
+import { createFeatureRequest, getFeatureRequests } from '@/lib/actions'
+import type { FeatureRequest } from '@/lib/types'
 
-const initial = { title: "", description: "" }
+const initial = { title: '', description: '' }
 
-const statusColors: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  pending: "secondary",
-  in_review: "outline",
-  planned: "default",
-  completed: "default",
-  declined: "destructive",
+const statusColors: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
+  pending: 'secondary',
+  in_review: 'outline',
+  planned: 'default',
+  completed: 'default',
+  declined: 'destructive',
 }
 
 export default function FeatureRequestPage() {
@@ -38,13 +38,15 @@ export default function FeatureRequestPage() {
       const data = await getFeatureRequests()
       setRequests(data)
     } catch (err) {
-      console.error("Failed to load feature requests:", err)
+      console.error('Failed to load feature requests:', err)
     } finally {
       setLoadingRequests(false)
     }
   }, [])
 
-  useEffect(() => { fetchRequests() }, [fetchRequests])
+  useEffect(() => {
+    fetchRequests()
+  }, [fetchRequests])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,7 +63,7 @@ export default function FeatureRequestPage() {
       setForm(initial)
       fetchRequests()
     } catch {
-      setErrors({ title: "Failed to submit. Please try again." })
+      setErrors({ title: 'Failed to submit. Please try again.' })
     } finally {
       setSubmitting(false)
     }
@@ -69,32 +71,36 @@ export default function FeatureRequestPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Feature Request"
-        subtitle="Help us build what matters to you"
-      />
+      <PageHeader title="Feature Request" subtitle="Help us build what matters to you" />
 
       <Card className="max-w-lg">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Lightbulb className="size-5 text-primary" />
+            <Lightbulb className="text-primary size-5" />
             <CardTitle>Got an idea?</CardTitle>
           </div>
           <CardDescription>
-            Tell us what feature or improvement would make Daftari work better for your business. We read every request.
+            Tell us what feature or improvement would make Daftari work better for your business. We
+            read every request.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {submitted ? (
-            <div className="space-y-3 text-center py-4">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10">
-                <Send className="size-5 text-primary" />
+            <div className="space-y-3 py-4 text-center">
+              <div className="bg-primary/10 mx-auto flex size-12 items-center justify-center rounded-full">
+                <Send className="text-primary size-5" />
               </div>
               <p className="font-medium">Thank you for your feedback</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 We&apos;ve received your request and will review it soon.
               </p>
-              <Button variant="outline" onClick={() => { setSubmitted(false); setErrors({}) }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSubmitted(false)
+                  setErrors({})
+                }}
+              >
                 Submit another
               </Button>
             </div>
@@ -106,7 +112,10 @@ export default function FeatureRequestPage() {
                   id="feature-title"
                   placeholder="e.g. SMS payment reminders"
                   value={form.title}
-                  onChange={(e) => { setForm({ ...form, title: e.target.value }); setErrors({ ...errors, title: undefined }) }}
+                  onChange={(e) => {
+                    setForm({ ...form, title: e.target.value })
+                    setErrors({ ...errors, title: undefined })
+                  }}
                   aria-invalid={!!errors.title}
                 />
                 <FieldError message={errors.title} />
@@ -117,7 +126,10 @@ export default function FeatureRequestPage() {
                   id="feature-description"
                   placeholder="Describe the feature and how it would help you..."
                   value={form.description}
-                  onChange={(e) => { setForm({ ...form, description: e.target.value }); setErrors({ ...errors, description: undefined }) }}
+                  onChange={(e) => {
+                    setForm({ ...form, description: e.target.value })
+                    setErrors({ ...errors, description: undefined })
+                  }}
                   className="min-h-28"
                   aria-invalid={!!errors.description}
                 />
@@ -125,7 +137,7 @@ export default function FeatureRequestPage() {
               </div>
               <Button type="submit" className="w-full sm:w-auto" disabled={submitting}>
                 <Send />
-                {submitting ? "Submitting…" : "Submit Request"}
+                {submitting ? 'Submitting…' : 'Submit Request'}
               </Button>
             </form>
           )}
@@ -138,22 +150,26 @@ export default function FeatureRequestPage() {
         {loadingRequests ? (
           <FeatureRequestListSkeleton />
         ) : requests.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No feature requests yet. Be the first to submit one.</p>
+          <p className="text-muted-foreground text-sm">
+            No feature requests yet. Be the first to submit one.
+          </p>
         ) : (
           <div className="space-y-3">
             {requests.map((r) => (
               <Card key={r.id}>
-                <CardContent className="p-4 space-y-1">
+                <CardContent className="space-y-1 p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium text-sm">{r.title}</p>
-                    <Badge variant={statusColors[r.status] ?? "secondary"}>
-                      {r.status.replace("_", " ")}
+                    <p className="text-sm font-medium">{r.title}</p>
+                    <Badge variant={statusColors[r.status] ?? 'secondary'}>
+                      {r.status.replace('_', ' ')}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{r.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(r.created_at).toLocaleDateString("en-KE", {
-                      year: "numeric", month: "short", day: "numeric",
+                  <p className="text-muted-foreground text-sm">{r.description}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {new Date(r.created_at).toLocaleDateString('en-KE', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
                     })}
                   </p>
                 </CardContent>

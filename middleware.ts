@@ -1,8 +1,14 @@
-import { createServerClient } from "@supabase/ssr"
-import { NextResponse, type NextRequest } from "next/server"
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
+
+  // Skip auth check for RSC/prefetch requests — they carry cookies already
+  // and don't need a round-trip to Supabase on every navigation prefetch.
+  const isRSC =
+    request.headers.has('next-router-state-tree') || request.nextUrl.searchParams.has('_rsc')
+  if (isRSC) return supabaseResponse
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,9 +19,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            request.cookies.set(name, value)
-          )
+          cookiesToSet.forEach((cookie) => request.cookies.set(cookie.name, cookie.value))
           supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -29,19 +33,19 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isLoginPage = request.nextUrl.pathname === "/login"
+  const isLoginPage = request.nextUrl.pathname === '/login'
 
   // Not logged in and not on login page → redirect to login
   if (!user && !isLoginPage) {
     const url = request.nextUrl.clone()
-    url.pathname = "/login"
+    url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
   // Logged in and on login page → redirect to app
   if (user && isLoginPage) {
     const url = request.nextUrl.clone()
-    url.pathname = "/customers"
+    url.pathname = '/customers'
     return NextResponse.redirect(url)
   }
 
@@ -50,6 +54,10 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|api/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /*
+     * Only run on page navigations — skip static assets, RSC payloads,
+     * prefetches, api routes, and auth routes.
+     */
+    '/((?!_next/static|_next/image|_next/data|api/|auth/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

@@ -1,42 +1,43 @@
-"use client"
+'use client'
 
-import Link from "next/link"
-import { useState, useEffect } from "react"
-import { usePathname, useRouter } from "next/navigation"
-import { Logo } from "@/components/logo"
-import { Button } from "@/components/ui/button"
+import Link from 'next/link'
+import { useState, useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Logo } from '@/components/logo'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
-import { signOut, getTenant } from "@/lib/actions"
-import type { Tenant } from "@/lib/types"
-import { ClipboardList, CreditCard, Lightbulb, LogOut, User, Users } from "lucide-react"
+} from '@/components/ui/dropdown-menu'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { cn } from '@/lib/utils'
+import { signOut, getTenant } from '@/lib/actions'
+import type { Tenant } from '@/lib/types'
+import { ClipboardList, CreditCard, Lightbulb, LogOut, User, Users } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 const topNavLinks = [
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/jobs", label: "Jobs", icon: ClipboardList },
-  { href: "/payments", label: "Payments", icon: CreditCard },
+  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/jobs', label: 'Jobs', icon: ClipboardList },
+  { href: '/payments', label: 'Payments', icon: CreditCard },
 ]
 
 const mobileTabLinks = [
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/jobs", label: "Jobs", icon: ClipboardList },
-  { href: "/payments", label: "Payments", icon: CreditCard },
-  { href: "/profile", label: "Profile", icon: User },
+  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/jobs', label: 'Jobs', icon: ClipboardList },
+  { href: '/payments', label: 'Payments', icon: CreditCard },
+  { href: '/profile', label: 'Profile', icon: User },
 ]
 
 function getInitials(name?: string): string {
-  if (!name || !name.trim()) return ""
+  if (!name || !name.trim()) return ''
   return name
-    .split(" ")
+    .split(' ')
     .map((w) => w[0])
-    .join("")
+    .join('')
     .slice(0, 2)
     .toUpperCase()
 }
@@ -47,12 +48,14 @@ export function Header() {
   const [tenant, setTenant] = useState<Tenant | null>(null)
 
   useEffect(() => {
-    getTenant().then(setTenant).catch(() => {})
+    getTenant()
+      .then(setTenant)
+      .catch(() => {})
   }, [])
 
   const handleLogout = async () => {
     await signOut()
-    router.push("/login")
+    router.push('/login')
   }
 
   const initials = getInitials(tenant?.business_name)
@@ -69,11 +72,11 @@ export function Header() {
             {topNavLinks.map((link) => (
               <Link key={link.href} href={link.href}>
                 <Button
-                  variant={pathname.startsWith(link.href) ? "secondary" : "ghost"}
+                  variant={pathname.startsWith(link.href) ? 'secondary' : 'ghost'}
                   size="sm"
                   className={cn(
-                    "text-white hover:text-white hover:bg-white/15",
-                    pathname.startsWith(link.href) && "font-semibold bg-white/20"
+                    'text-white hover:bg-white/15 hover:text-white',
+                    pathname.startsWith(link.href) && 'bg-white/20 font-semibold'
                   )}
                 >
                   {link.label}
@@ -82,40 +85,43 @@ export function Header() {
             ))}
           </nav>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/15">
-                <Avatar className="size-7">
-                  <AvatarFallback className="bg-white/20 text-white text-xs">
-                    {initials || <User className="size-4" />}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem asChild>
-                <Link href="/profile">
-                  <User />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/feature-request">
-                  <Lightbulb />
-                  Feature Requests
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={handleLogout}>
-                <LogOut />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/15">
+                  <Avatar className="size-7">
+                    <AvatarFallback className="bg-white/20 text-xs text-white">
+                      {initials || <User className="size-4" />}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">
+                    <User />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/feature-request">
+                    <Lightbulb />
+                    Feature Requests
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={handleLogout}>
+                  <LogOut />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background sm:hidden">
+      <nav className="bg-background fixed right-0 bottom-0 left-0 z-50 border-t sm:hidden">
         <div className="flex">
           {mobileTabLinks.map((link) => {
             const Icon = link.icon
@@ -125,10 +131,8 @@ export function Header() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "flex flex-1 flex-col items-center gap-0.5 py-2 text-xs transition-colors",
-                  active
-                    ? "text-primary font-medium"
-                    : "text-muted-foreground"
+                  'flex flex-1 flex-col items-center gap-0.5 py-2 text-xs transition-colors',
+                  active ? 'text-primary font-medium' : 'text-muted-foreground'
                 )}
               >
                 <Icon className="size-5" />

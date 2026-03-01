@@ -1,36 +1,42 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Noto_Sans } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Geist, Geist_Mono, Noto_Sans } from 'next/font/google'
+import './globals.css'
+import { ThemeProvider } from '@/components/theme-provider'
 
-const notoSans = Noto_Sans({variable:'--font-sans'});
+const notoSans = Noto_Sans({ variable: '--font-sans' })
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+})
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+})
 
 export const metadata: Metadata = {
-  title: "Daftari",
-  description: "Customer ledger management",
-};
+  title: 'Daftari',
+  description: 'Customer ledger management',
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={notoSans.variable}>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="en" className={notoSans.variable} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');var d=document.documentElement;if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){d.classList.add('dark')}}catch(e){}})()`,
+          }}
+        />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
-  );
+  )
 }

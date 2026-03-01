@@ -20,7 +20,7 @@ export interface Job {
   customer_id: string
   description: string
   total_quote: number
-  status: "open" | "closed"
+  status: 'open' | 'closed'
   created_at: string
 }
 
@@ -48,9 +48,9 @@ export interface Transaction {
   job_id: string | null
   mpesa_code: string | null
   amount: number
-  status: "paid" | "pending" | "failed"
+  status: 'paid' | 'pending' | 'failed'
   raw_text: string | null
-  type: "credit" | "debit"
+  type: 'credit' | 'debit'
   transaction_date: string
   created_at: string
 }

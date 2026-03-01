@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from '@/lib/utils'
 
 interface PageHeaderProps {
   title: string
@@ -9,12 +9,10 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, action, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex items-start justify-between gap-4", className)}>
+    <div className={cn('flex items-start justify-between gap-4', className)}>
       <div>
         <h1 className="text-lg font-semibold sm:text-xl">{title}</h1>
-        {subtitle && (
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-muted-foreground text-sm">{subtitle}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

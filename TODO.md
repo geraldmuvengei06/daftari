@@ -7,32 +7,34 @@ Twilio signs every webhook request with `X-Twilio-Signature`. Validate it to blo
 ### Steps
 
 1. Install Twilio SDK:
+
 ```bash
 pnpm add twilio
 ```
 
 2. Add to `.env`:
+
 ```
 TWILIO_AUTH_TOKEN=your-auth-token-here
 ```
 
 3. Add validation in `app/api/whatsapp/route.ts` after parsing formData:
+
 ```ts
-import { validateRequest } from "twilio";
+import { validateRequest } from 'twilio'
 
-const authToken = process.env.TWILIO_AUTH_TOKEN!;
-const url = process.env.APP_URL + "/api/whatsapp";
+const authToken = process.env.TWILIO_AUTH_TOKEN!
+const url = process.env.APP_URL + '/api/whatsapp'
 
-const signature = request.headers.get("x-twilio-signature") || "";
-const params = Object.fromEntries(formData.entries()) as Record<string, string>;
+const signature = request.headers.get('x-twilio-signature') || ''
+const params = Object.fromEntries(formData.entries()) as Record<string, string>
 
-const isValid = validateRequest(authToken, signature, url, params);
+const isValid = validateRequest(authToken, signature, url, params)
 
 if (!isValid) {
-    return new NextResponse("Unauthorized", { status: 403 });
+  return new NextResponse('Unauthorized', { status: 403 })
 }
 ```
-
 
 ## Secure Environment Variables
 
@@ -45,12 +47,12 @@ Next.js exposes any env var prefixed with `NEXT_PUBLIC_` to the browser. Only us
 
 ### Current vars
 
-| Variable | Prefix | Safe? |
-|---|---|---|
-| `APP_URL` | none | ✅ Server-only |
-| `NEXT_PUBLIC_SUPABASE_URL` | `NEXT_PUBLIC_` | ✅ OK — project URL is public |
+| Variable                               | Prefix         | Safe?                                                      |
+| -------------------------------------- | -------------- | ---------------------------------------------------------- |
+| `APP_URL`                              | none           | ✅ Server-only                                             |
+| `NEXT_PUBLIC_SUPABASE_URL`             | `NEXT_PUBLIC_` | ✅ OK — project URL is public                              |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `NEXT_PUBLIC_` | ✅ OK — anon key is meant to be public (RLS protects data) |
-| `TWILIO_AUTH_TOKEN` | none | ✅ Server-only (keep it this way) |
+| `TWILIO_AUTH_TOKEN`                    | none           | ✅ Server-only (keep it this way)                          |
 
 ### Checklist
 
