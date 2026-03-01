@@ -1,21 +1,69 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
-function twimlResponse(message: string) {
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>${message}</Message>
-</Response>`;
-    return new NextResponse(twiml, {
-        headers: { "Content-Type": "text/xml" },
-    })
+// ─── Meta WhatsApp Cloud API Config ───
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN!          // Permanent access token
+const WHATSAPP_PHONE_ID = process.env.WHATSAPP_PHONE_ID!    // Phone number ID from Meta dashboard
+const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN! // Your custom webhook verify token
+const GRAPH_API_VERSION = "v21.0"
+
+// ─── Send reply via Meta Cloud API ───
+async function sendWhatsAppReply(to: string, message: string) {
+    const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${WHATSAPP_PHONE_ID}/messages`
+
+    try {
+        const resp = await fetch(url, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to,
+                type: "text",
+                text: { body: message },
+            }),
+        })
+        if (!resp.ok) {
+            const err = await resp.text()
+            console.error("WhatsApp send failed:", resp.status, err)
+        }
+    } catch (err) {
+        console.error("WhatsApp send error:", err)
+    }
 }
 
+// ─── Extract incoming message from Meta webhook payload ───
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractMessage(body: any): { from: string; text: string } | null {
+    try {
+        const entry = body?.entry?.[0]
+        const change = entry?.changes?.[0]
+        const value = change?.value
+        const message = value?.messages?.[0]
+
+        if (!message || message.type !== "text") return null
+
+        return {
+            from: message.from,       // e.g. "254712345678" (no + prefix)
+            text: message.text?.body ?? "",
+        }
+    } catch {
+        return null
+    }
+}
+
+// ─── Tenant & Customer Resolution ───
+
 async function resolveTenant(phone: string) {
+    // Meta sends "254..." without +, but DB may store "+254..."
+    const phoneVariants = [phone, `+${phone}`]
+
     const { data, error } = await supabaseAdmin
         .from("tenants")
         .select("id")
-        .eq("owner_phone", phone)
+        .in("owner_phone", phoneVariants)
         .maybeSingle()
     if (error || !data) {
         console.error("Tenant lookup failed for phone:", phone, error)
@@ -25,10 +73,8 @@ async function resolveTenant(phone: string) {
 }
 
 async function resolveCustomer(tenantId: string, name: string, phone: string | null) {
-    // Normalize name: collapse multiple spaces
     const normalizedName = name.replace(/\s+/g, " ").trim()
 
-    // First try by phone (most reliable identifier)
     if (phone) {
         const { data: byPhone } = await supabaseAdmin
             .from("customers")
@@ -38,7 +84,6 @@ async function resolveCustomer(tenantId: string, name: string, phone: string | n
             .maybeSingle()
 
         if (byPhone) {
-            // Update name if it was a placeholder (e.g. phone used as name)
             if (byPhone.name === byPhone.id || byPhone.name === phone) {
                 await supabaseAdmin
                     .from("customers")
@@ -49,7 +94,6 @@ async function resolveCustomer(tenantId: string, name: string, phone: string | n
         }
     }
 
-    // Then try by name (for customers created via Job command without phone)
     const { data: byName } = await supabaseAdmin
         .from("customers")
         .select("id, name, phone")
@@ -59,7 +103,6 @@ async function resolveCustomer(tenantId: string, name: string, phone: string | n
 
     if (byName && byName.length > 0) {
         const existing = byName[0]
-        // If this customer was created without a real phone, update it
         if (phone && (existing.phone === existing.name || !existing.phone.match(/^\+?\d/))) {
             await supabaseAdmin
                 .from("customers")
@@ -69,7 +112,6 @@ async function resolveCustomer(tenantId: string, name: string, phone: string | n
         return { id: existing.id, name: existing.name }
     }
 
-    // Create new customer
     const { data, error } = await supabaseAdmin
         .from("customers")
         .insert({ phone: phone ?? normalizedName, name: normalizedName, tenant_id: tenantId })
@@ -80,7 +122,6 @@ async function resolveCustomer(tenantId: string, name: string, phone: string | n
 }
 
 // ─── Job Creation ───
-// Format: "Job <CustomerName> <Amount> <Description>"
 function parseJobMessage(text: string) {
     const match = text.match(/^Job\s+(.+?)\s+(\d[\d,]*)\s+(.+)$/i)
     if (!match) return null
@@ -91,11 +132,9 @@ function parseJobMessage(text: string) {
     }
 }
 
-async function handleJobCreation(tenantId: string, parsed: { customerName: string; amount: number; description: string }) {
-    // Normalize name: collapse multiple spaces
+async function handleJobCreation(tenantId: string, parsed: { customerName: string; amount: number; description: string }): Promise<string> {
     const normalizedName = parsed.customerName.replace(/\s+/g, " ").trim()
 
-    // Search by name (fuzzy) OR by phone containing the name
     const { data: customers } = await supabaseAdmin
         .from("customers")
         .select("id, name")
@@ -110,13 +149,12 @@ async function handleJobCreation(tenantId: string, parsed: { customerName: strin
         customerId = customers[0].id
         customerName = customers[0].name
     } else {
-        // Create customer with name as phone placeholder
         const { data: newCust, error } = await supabaseAdmin
             .from("customers")
             .insert({ name: normalizedName, phone: normalizedName, tenant_id: tenantId })
             .select("id, name")
             .single()
-        if (error || !newCust) return twimlResponse("⚠️ Hatukuweza kuunda customer. Jaribu tena.")
+        if (error || !newCust) return "⚠️ Hatukuweza kuunda customer. Jaribu tena."
         customerId = newCust.id
         customerName = newCust.name
     }
@@ -130,9 +168,9 @@ async function handleJobCreation(tenantId: string, parsed: { customerName: strin
             total_quote: parsed.amount,
         })
 
-    if (error) return twimlResponse("⚠️ Tatizo la kuunda job card. Jaribu tena.")
+    if (error) return "⚠️ Tatizo la kuunda job card. Jaribu tena."
 
-    return twimlResponse(
+    return (
         `📋 Job Card imeundwa!\n` +
         `👤 ${customerName}\n` +
         `💰 Quote: KES ${parsed.amount.toLocaleString()}\n` +
@@ -142,14 +180,13 @@ async function handleJobCreation(tenantId: string, parsed: { customerName: strin
 }
 
 // ─── Balance Query ───
-// Format: "Bal <CustomerName>"
 function parseBalanceQuery(text: string) {
     const match = text.match(/^Bal\s+(.+)$/i)
     if (!match) return null
     return match[1].trim()
 }
 
-async function handleBalanceQuery(tenantId: string, customerName: string) {
+async function handleBalanceQuery(tenantId: string, customerName: string): Promise<string> {
     const { data: customers } = await supabaseAdmin
         .from("customers")
         .select("id, name")
@@ -158,12 +195,11 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
         .limit(1)
 
     if (!customers || customers.length === 0) {
-        return twimlResponse(`❌ Customer "${customerName}" hajapatikana.`)
+        return `❌ Customer "${customerName}" hajapatikana.`
     }
 
     const customer = customers[0]
 
-    // Get ALL transactions for this customer (credits and debits)
     const { data: txns } = await supabaseAdmin
         .from("transactions")
         .select("amount, type")
@@ -179,7 +215,6 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
         .reduce((s, t) => s + Number(t.amount), 0)
     const netPaid = totalCredits - totalDebits
 
-    // Get open jobs (what they owe)
     const { data: jobs } = await supabaseAdmin
         .from("jobs")
         .select("id, description, total_quote")
@@ -190,14 +225,13 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
 
     if (!jobs || jobs.length === 0) {
         if (netPaid > 0) {
-            return twimlResponse(`✅ ${customer.name} hana open jobs.\n💰 Wallet: KES ${netPaid.toLocaleString()} (credit)`)
+            return `✅ ${customer.name} hana open jobs.\n💰 Wallet: KES ${netPaid.toLocaleString()} (credit)`
         }
-        return twimlResponse(`✅ ${customer.name} hana open jobs. Hakuna deni.`)
+        return `✅ ${customer.name} hana open jobs. Hakuna deni.`
     }
 
     const totalQuote = jobs.reduce((s, j) => s + Number(j.total_quote), 0)
 
-    // Walk through jobs oldest-first, deducting from wallet
     let wallet = Math.max(0, netPaid)
     const lines: string[] = [`📊 Balance ya ${customer.name}:\n`]
 
@@ -227,13 +261,13 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
         lines.push(`⏳ Owes: KES ${owes.toLocaleString()}`)
     }
 
-    return twimlResponse(lines.join("\n"))
+    return lines.join("\n")
 }
 
 // ─── M-Pesa Payment Processing ───
-async function handleMpesaPayment(tenantId: string, messageText: string) {
+async function handleMpesaPayment(tenantId: string, messageText: string): Promise<string | null> {
     if (/Fuliza\s+M-PESA/i.test(messageText)) {
-        return twimlResponse("ℹ️ Fuliza payments hazirekodiwa kwa sasa.")
+        return "ℹ️ Fuliza payments hazirekodiwa kwa sasa."
     }
 
     const isDebit = /sent\s+to/i.test(messageText)
@@ -271,21 +305,19 @@ async function handleMpesaPayment(tenantId: string, messageText: string) {
 
     const txType = isDebit ? "debit" : "credit"
 
-    // Check duplicate and resolve customer in parallel
     const [dupResult, customer] = await Promise.all([
         supabaseAdmin.from("transactions").select("id").eq("mpesa_code", code).maybeSingle(),
         resolveCustomer(tenantId, customer_name, customer_phone),
     ])
 
     if (dupResult.data) {
-        return twimlResponse("ℹ️ Payment isha-recordiwa.")
+        return "ℹ️ Payment isha-recordiwa."
     }
 
     if (!customer) {
-        return twimlResponse("⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.")
+        return "⚠️ Kuna tatizo la system. Tafadhali try tena baadaye."
     }
 
-    // Insert transaction
     const { error: txError } = await supabaseAdmin
         .from("transactions")
         .insert({
@@ -301,60 +333,91 @@ async function handleMpesaPayment(tenantId: string, messageText: string) {
 
     if (txError) {
         console.error("Transaction insert failed:", txError)
-        return twimlResponse("⚠️ Kuna tatizo la save payment. Tafadhali try tena baadaye.")
+        return "⚠️ Kuna tatizo la save payment. Tafadhali try tena baadaye."
     }
 
     const txLabel = txType === "credit" ? "Umepokea" : "Umetuma"
-    return twimlResponse(
-        `✅ ${txLabel} KES ${amount} ${txType === "credit" ? "kutoka kwa" : "kwa"} ${customer.name}.\nTuma "Bal ${customer.name}" kuona balance.`
+    return `✅ ${txLabel} KES ${amount} ${txType === "credit" ? "kutoka kwa" : "kwa"} ${customer.name}.\nTuma "Bal ${customer.name}" kuona balance.`
+}
+
+// ─── Process message and send reply ───
+async function processAndReply(senderPhone: string, messageText: string) {
+    const tenantId = await resolveTenant(senderPhone)
+    if (!tenantId) {
+        await sendWhatsAppReply(senderPhone, "⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.")
+        return
+    }
+
+    // 1. Job creation
+    const jobParsed = parseJobMessage(messageText)
+    if (jobParsed) {
+        const reply = await handleJobCreation(tenantId, jobParsed)
+        await sendWhatsAppReply(senderPhone, reply)
+        return
+    }
+
+    // 2. Balance query
+    const balanceName = parseBalanceQuery(messageText)
+    if (balanceName) {
+        const reply = await handleBalanceQuery(tenantId, balanceName)
+        await sendWhatsAppReply(senderPhone, reply)
+        return
+    }
+
+    // 3. M-Pesa payment
+    const mpesaResult = await handleMpesaPayment(tenantId, messageText)
+    if (mpesaResult) {
+        await sendWhatsAppReply(senderPhone, mpesaResult)
+        return
+    }
+
+    await sendWhatsAppReply(
+        senderPhone,
+        "🤔 Sijui message hii. Jaribu moja ya hizi:\n\n" +
+        "📋 *Job* <Jina> <Amount> <Maelezo>\n" +
+        "   Mfano: Job Jane 1000 Print business cards\n\n" +
+        "💰 *Bal* <Jina>\n" +
+        "   Mfano: Bal Jane\n\n" +
+        "📲 Forward M-Pesa SMS → itarekodiwa automatically"
     )
 }
 
-// ─── Main Handler ───
+// ─── Webhook Verification (GET) ───
+// Meta sends this once when you register the webhook URL
+export async function GET(request: NextRequest) {
+    const { searchParams } = new URL(request.url)
+    const mode = searchParams.get("hub.mode")
+    const token = searchParams.get("hub.verify_token")
+    const challenge = searchParams.get("hub.challenge")
+
+    if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN) {
+        console.log("Webhook verified")
+        return new NextResponse(challenge, { status: 200 })
+    }
+
+    return new NextResponse("Forbidden", { status: 403 })
+}
+
+// ─── Webhook Handler (POST) ───
+// Meta sends incoming messages here as JSON
 export async function POST(request: NextRequest) {
     try {
-        const formData = await request.formData()
-        const body = Object.fromEntries(formData.entries())
-        const message_text = body["Body"] as string
-        const tenant_phone = body["From"]?.toString().replace("whatsapp:", "")
+        const body = await request.json()
 
-        if (!message_text || !tenant_phone) {
-            return twimlResponse("⚠️ Message haikueleweka. Tafadhali tuma tena.")
+        const msg = extractMessage(body)
+        if (!msg) {
+            // Could be a status update, delivery receipt, etc. — acknowledge it
+            return NextResponse.json({ status: "ok" })
         }
 
-        const tenantId = await resolveTenant(tenant_phone)
-        if (!tenantId) {
-            return twimlResponse("⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.")
-        }
-
-        // 1. Check for Job creation: "Job <Name> <Amount> <Description>"
-        const jobParsed = parseJobMessage(message_text)
-        if (jobParsed) {
-            return handleJobCreation(tenantId, jobParsed)
-        }
-
-        // 2. Check for Balance query: "Bal <Name>"
-        const balanceName = parseBalanceQuery(message_text)
-        if (balanceName) {
-            return handleBalanceQuery(tenantId, balanceName)
-        }
-
-        // 3. Try M-Pesa payment processing
-        const mpesaResult = await handleMpesaPayment(tenantId, message_text)
-        if (mpesaResult) {
-            return mpesaResult
-        }
-
-        return twimlResponse(
-            "🤔 Sijui message hii. Jaribu moja ya hizi:\n\n" +
-            "📋 *Job* <Jina> <Amount> <Maelezo>\n" +
-            "   Mfano: Job Jane 1000 Print business cards\n\n" +
-            "💰 *Bal* <Jina>\n" +
-            "   Mfano: Bal Jane\n\n" +
-            "📲 Forward M-Pesa SMS → itarekodiwa automatically"
+        // Respond to Meta immediately, process async
+        processAndReply(msg.from, msg.text).catch((err) =>
+            console.error("processAndReply failed:", err)
         )
+
+        return NextResponse.json({ status: "ok" })
     } catch (error) {
-        console.error("Unexpected error:", error)
-        return twimlResponse("⚠️ Kuna tatizo. Tafadhali try tena baadaye.")
+        console.error("Webhook error:", error)
+        return NextResponse.json({ status: "error" }, { status: 500 })
     }
 }
