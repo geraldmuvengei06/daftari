@@ -1,10 +1,10 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { FieldError } from "@/components/field-error"
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { FieldError } from '@/components/field-error'
 import {
   Dialog,
   DialogContent,
@@ -13,16 +13,17 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { addCustomerSchema, getFieldErrors, type FieldErrors } from "@/lib/validations"
-import { createCustomer } from "@/lib/actions"
+} from '@/components/ui/dialog'
+import { addCustomerSchema, getFieldErrors, type FieldErrors } from '@/lib/validations'
+import { createCustomer } from '@/lib/actions'
+import { PhoneInput } from '@/components/phone-input'
 
 interface AddCustomerModalProps {
   trigger: React.ReactNode
   onSuccess?: () => void
 }
 
-const initial = { name: "", phone: "" }
+const initial = { name: '', phone: '' }
 
 export function AddCustomerModal({ trigger, onSuccess }: AddCustomerModalProps) {
   const [open, setOpen] = useState(false)
@@ -45,14 +46,23 @@ export function AddCustomerModal({ trigger, onSuccess }: AddCustomerModalProps) 
       setForm(initial)
       onSuccess?.()
     } catch {
-      setErrors({ name: "Failed to add customer. Please try again." })
+      setErrors({ name: 'Failed to add customer. Please try again.' })
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setErrors({}); setForm(initial) } }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v)
+        if (!v) {
+          setErrors({})
+          setForm(initial)
+        }
+      }}
+    >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -66,26 +76,30 @@ export function AddCustomerModal({ trigger, onSuccess }: AddCustomerModalProps) 
               id="customer-name"
               placeholder="e.g. Alice Mwangi"
               value={form.name}
-              onChange={(e) => { setForm({ ...form, name: e.target.value }); setErrors({ ...errors, name: undefined }) }}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value })
+                setErrors({ ...errors, name: undefined })
+              }}
               aria-invalid={!!errors.name}
             />
             <FieldError message={errors.name} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="customer-phone">Phone</Label>
-            <Input
+            <PhoneInput
               id="customer-phone"
-              type="tel"
-              placeholder="+254712345678"
               value={form.phone}
-              onChange={(e) => { setForm({ ...form, phone: e.target.value }); setErrors({ ...errors, phone: undefined }) }}
+              onChange={(v) => {
+                setForm({ ...form, phone: v })
+                setErrors({ ...errors, phone: undefined })
+              }}
               aria-invalid={!!errors.phone}
             />
             <FieldError message={errors.phone} />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding…" : "Add Customer"}
+              {submitting ? 'Adding…' : 'Add Customer'}
             </Button>
           </DialogFooter>
         </form>
