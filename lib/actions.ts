@@ -47,6 +47,7 @@ const getTenantId = cache(async (): Promise<string> => {
       owner_phone: user.phone ?? '',
       owner_email: user.email ?? '',
       business_name: 'My Business',
+      registration_state: 'complete',
     })
     .select('id')
     .single()
@@ -89,6 +90,7 @@ export async function ensureTenant(phone: string) {
       owner_phone: phone,
       owner_email: user.email ?? '',
       business_name: 'My Business',
+      registration_state: 'complete',
     })
     .select('id')
     .single()

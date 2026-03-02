@@ -2,7 +2,9 @@ export interface Tenant {
   id: string
   user_id: string
   owner_phone: string
+  owner_email: string
   business_name: string
+  registration_state: 'awaiting_email' | 'awaiting_verification' | 'complete'
   created_at: string
 }
 
