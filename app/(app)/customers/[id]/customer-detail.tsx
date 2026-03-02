@@ -17,7 +17,7 @@ import { useRealtimeInserts } from '@/lib/use-realtime'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { CreateJobModal } from '@/components/create-job-modal'
 
-const PER_PAGE = 5
+const PER_PAGE = 20
 
 function paginate<T>(items: T[], page: number, perPage: number) {
   const start = (page - 1) * perPage

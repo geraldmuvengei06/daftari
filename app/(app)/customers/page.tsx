@@ -12,7 +12,7 @@ import { useRealtimeInserts } from '@/lib/use-realtime'
 import { TableSkeleton } from '@/components/skeletons'
 import { Plus } from 'lucide-react'
 
-const PER_PAGE = 8
+const PER_PAGE = 20
 
 function paginate<T>(items: T[], page: number, perPage: number) {
   const start = (page - 1) * perPage

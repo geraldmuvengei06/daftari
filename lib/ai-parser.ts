@@ -1,4 +1,6 @@
 import { GoogleGenAI } from '@google/genai'
+import OpenAI from 'openai'
+import features from '@/features.json'
 
 // ─── Types ───
 
@@ -47,17 +49,35 @@ type LoginIntent = {
   raw_summary: string
 }
 
+type ReportIntent = {
+  type: 'REPORT'
+  data: {
+    report: 'unpaid' | 'income' | 'summary'
+    period: 'today' | 'week' | 'month' | 'all'
+  }
+  raw_summary: string
+}
+
 type UnknownIntent = {
   type: 'UNKNOWN'
   data: Record<string, never>
   raw_summary: string
 }
 
-export type ParsedIntent = PaymentIntent | JobIntent | QueryIntent | LoginIntent | UnknownIntent
+export type ParsedIntent = PaymentIntent | JobIntent | QueryIntent | ReportIntent | LoginIntent | UnknownIntent
 
-// ─── Gemini Client ───
+// ─── Feature Flags ───
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
+type AIProvider = 'gemini' | 'openai'
+
+function getProvider(): AIProvider {
+  // ENV override takes priority, then feature flag, then default
+  const envProvider = process.env.AI_PROVIDER?.toLowerCase()
+  if (envProvider === 'openai' || envProvider === 'gemini') return envProvider
+  return (features as Record<string, unknown>).aiProvider === 'openai' ? 'openai' : 'gemini'
+}
+
+// ─── Shared System Prompt ───
 
 const SYSTEM_PROMPT = `Act as a specialized financial assistant for Kenyan solopreneurs. You will receive a text message from a WhatsApp chat. Your goal is to return a clean JSON object.
 
@@ -89,16 +109,28 @@ Rules:
    - data.total_price: sum of all item totals
    Each distinct service/product is a separate item. If "at X each" or "@ X" is given, use that as unit_price and calculate total = quantity * unit_price. If only a lump sum is given, quantity=1 and unit_price=total.
 
-4. Queries: If the user asks a question about a customer (e.g., "What is Jane's balance?", "jane ananidai ngapi", "Bal Jane"), extract:
+4. Queries: If the user asks a question about a specific customer (e.g., "What is Jane's balance?", "jane ananidai ngapi", "Bal Jane"), extract:
    - type: "QUERY"
    - data.target_name (title-cased)
    - data.intent: "BALANCE"
 
-5. Login: If the user wants to log in (e.g., "Login", "niingie", "sign in"), extract:
+5. Reports: If the user asks for a business report or summary (not about a specific customer), extract:
+   - type: "REPORT"
+   - data.report: one of "unpaid" (outstanding debts/deni), "income" (money received/mapato), "summary" (general overview/muhtasari)
+   - data.period: one of "today" (leo), "week" (wiki hii), "month" (mwezi huu), "all" (zote/all time)
+   Examples:
+   - "deni za leo" → report: "unpaid", period: "today"
+   - "mapato ya wiki hii" → report: "income", period: "week"
+   - "unpaid bills this month" → report: "unpaid", period: "month"
+   - "how much have I made today" → report: "income", period: "today"
+   - "muhtasari" or "summary" → report: "summary", period: "all"
+   - "report" → report: "summary", period: "today"
+
+6. Login: If the user wants to log in (e.g., "Login", "niingie", "sign in"), extract:
    - type: "LOGIN"
    - data: {}
 
-6. Unknown: If the message doesn't match any intent, return:
+7. Unknown: If the message doesn't match any intent, return:
    - type: "UNKNOWN"
    - data: {}
 
@@ -111,11 +143,12 @@ Language: Support English, Swahili, and Sheng (Kenyan slang). Examples:
 Always include a "raw_summary" field: a short human-readable summary of what you understood.
 
 Output format:
-{ "type": "PAYMENT|JOB|QUERY|LOGIN|UNKNOWN", "data": { ...extracted fields... }, "raw_summary": "Short human-readable summary" }`
+{ "type": "PAYMENT|JOB|QUERY|REPORT|LOGIN|UNKNOWN", "data": { ...extracted fields... }, "raw_summary": "Short human-readable summary" }`
 
-// ─── Parser ───
+// ─── Provider: Gemini ───
 
-export async function parseWithGemini(message: string): Promise<ParsedIntent> {
+async function callGemini(message: string): Promise<string> {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
   const response = await ai.models.generateContent({
     model: process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
     config: {
@@ -124,16 +157,33 @@ export async function parseWithGemini(message: string): Promise<ParsedIntent> {
     },
     contents: message,
   })
+  return response.text ?? ''
+}
 
-  const text = response.text ?? ''
-  const parsed = JSON.parse(text)
+// ─── Provider: OpenAI ───
+
+async function callOpenAI(message: string): Promise<string> {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' })
+  const response = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: message },
+    ],
+  })
+  return response.choices[0]?.message?.content ?? ''
+}
+
+// ─── Validate & Shape Response ───
+
+function validateResponse(parsed: Record<string, unknown>): ParsedIntent {
   const summary = String(parsed.raw_summary ?? '')
 
-  // Validate and return typed result
   switch (parsed.type) {
     case 'PAYMENT': {
-      const d = parsed.data
-      if (d?.amount > 0 && d?.customer_name) {
+      const d = parsed.data as Record<string, unknown> | undefined
+      if (d && Number(d.amount) > 0 && d.customer_name) {
         return {
           type: 'PAYMENT',
           data: {
@@ -150,9 +200,10 @@ export async function parseWithGemini(message: string): Promise<ParsedIntent> {
       break
     }
     case 'JOB': {
-      const d = parsed.data
-      const items: JobItem[] = Array.isArray(d?.items)
-        ? d.items
+      const d = parsed.data as Record<string, unknown> | undefined
+      const rawItems = d?.items
+      const items: JobItem[] = Array.isArray(rawItems)
+        ? rawItems
             .filter((i: Record<string, unknown>) => i?.description && Number(i?.total) > 0)
             .map((i: Record<string, unknown>) => ({
               description: String(i.description),
@@ -161,8 +212,8 @@ export async function parseWithGemini(message: string): Promise<ParsedIntent> {
               total: Number(i.total),
             }))
         : []
-      // Fallback: if Gemini returned old flat format, wrap it
-      if (items.length === 0 && d?.description && d?.total_price > 0) {
+      // Fallback: flat format from older prompt versions
+      if (items.length === 0 && d?.description && Number(d?.total_price) > 0) {
         items.push({
           description: String(d.description),
           quantity: 1,
@@ -174,18 +225,14 @@ export async function parseWithGemini(message: string): Promise<ParsedIntent> {
         const total = items.reduce((s, i) => s + i.total, 0)
         return {
           type: 'JOB',
-          data: {
-            customer_name: String(d.customer_name),
-            items,
-            total_price: total,
-          },
+          data: { customer_name: String(d.customer_name), items, total_price: total },
           raw_summary: summary,
         }
       }
       break
     }
     case 'QUERY': {
-      const d = parsed.data
+      const d = parsed.data as Record<string, unknown> | undefined
       if (d?.target_name) {
         return {
           type: 'QUERY',
@@ -195,9 +242,37 @@ export async function parseWithGemini(message: string): Promise<ParsedIntent> {
       }
       break
     }
+    case 'REPORT': {
+      const d = parsed.data as Record<string, unknown> | undefined
+      const validReports = ['unpaid', 'income', 'summary'] as const
+      const validPeriods = ['today', 'week', 'month', 'all'] as const
+      const report = validReports.includes(d?.report as typeof validReports[number])
+        ? (d!.report as typeof validReports[number])
+        : 'summary'
+      const period = validPeriods.includes(d?.period as typeof validPeriods[number])
+        ? (d!.period as typeof validPeriods[number])
+        : 'today'
+      return {
+        type: 'REPORT',
+        data: { report, period },
+        raw_summary: summary,
+      }
+    }
     case 'LOGIN':
       return { type: 'LOGIN', data: {}, raw_summary: summary }
   }
 
   return { type: 'UNKNOWN', data: {}, raw_summary: summary }
 }
+
+// ─── Main Entry Point ───
+
+export async function parseWithAI(message: string): Promise<ParsedIntent> {
+  const provider = getProvider()
+  const raw = provider === 'openai' ? await callOpenAI(message) : await callGemini(message)
+  const parsed = JSON.parse(raw)
+  return validateResponse(parsed)
+}
+
+// Keep backward compat alias
+export const parseWithGemini = parseWithAI

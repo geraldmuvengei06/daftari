@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { parseWithGemini } from '@/lib/ai-parser'
+import { parseWithAI } from '@/lib/ai-parser'
 
 function twimlResponse(message: string) {
+  const escaped = message
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>${message}</Message>
+  <Message>${escaped}</Message>
 </Response>`
   return new NextResponse(twiml, {
     headers: { 'Content-Type': 'text/xml' },
@@ -111,7 +115,7 @@ async function handleJobCreation(
       .insert({ name: normalizedName, phone: normalizedName, tenant_id: tenantId })
       .select('id, name')
       .single()
-    if (error || !newCust) return twimlResponse('⚠️ Hatukuweza kuunda customer. Jaribu tena.')
+    if (error || !newCust) return twimlResponse('😕 Hatukuweza kuunda customer. Jaribu tena.')
     customerId = newCust.id
     customerName = newCust.name
   }
@@ -127,23 +131,23 @@ async function handleJobCreation(
   }))
 
   const { error } = await supabaseAdmin.from('jobs').insert(jobRows)
-  if (error) return twimlResponse('⚠️ Tatizo la kuunda job card. Jaribu tena.')
+  if (error) return twimlResponse('😕 Tatizo la kuunda job card. Jaribu tena.')
 
   const grandTotal = parsed.items.reduce((s, i) => s + i.total, 0)
 
   // Build response
-  const lines = [`📋 Job Card${parsed.items.length > 1 ? 's' : ''} imeundwa!`, `👤 ${customerName}`]
+  const lines = [`✨ Job Card${parsed.items.length > 1 ? 's' : ''} imeundwa!`, `👤 ${customerName}`]
   for (const item of parsed.items) {
     if (item.quantity > 1) {
-      lines.push(`  📝 ${item.description} — ${item.quantity} × KES ${item.unit_price.toLocaleString()} = KES ${item.total.toLocaleString()}`)
+      lines.push(`  🔹 ${item.description} — ${item.quantity} × KES ${item.unit_price.toLocaleString()} = KES ${item.total.toLocaleString()}`)
     } else {
-      lines.push(`  📝 ${item.description} — KES ${item.total.toLocaleString()}`)
+      lines.push(`  🔹 ${item.description} — KES ${item.total.toLocaleString()}`)
     }
   }
   if (parsed.items.length > 1) {
     lines.push(`💰 Total: KES ${grandTotal.toLocaleString()}`)
   }
-  lines.push('', 'Tuma M-Pesa message kupata payment ikirekodiwa automatically.')
+  lines.push('', '📲 Tuma M-Pesa message kupata payment ikirekodiwa automatically.')
 
   return twimlResponse(lines.join('\n'))
 }
@@ -165,7 +169,7 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
     .limit(1)
 
   if (!customers || customers.length === 0) {
-    return twimlResponse(`❌ Customer "${customerName}" hajapatikana.`)
+    return twimlResponse(`🔍 Customer "${customerName}" hajapatikana.`)
   }
 
   const customer = customers[0]
@@ -198,10 +202,10 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
   if (!jobs || jobs.length === 0) {
     if (netPaid > 0) {
       return twimlResponse(
-        `✅ ${customer.name} hana open jobs.\n💰 Wallet: KES ${netPaid.toLocaleString()} (credit)`
+        `🎉 ${customer.name} hana open jobs.\n💰 Wallet: KES ${netPaid.toLocaleString()} (credit)`
       )
     }
-    return twimlResponse(`✅ ${customer.name} hana open jobs. Hakuna deni.`)
+    return twimlResponse(`🎉 ${customer.name} hana open jobs. Hakuna deni.`)
   }
 
   const totalQuote = jobs.reduce((s, j) => s + Number(j.total_quote), 0)
@@ -217,23 +221,23 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
     const remaining = quote - applied
     const pct = quote > 0 ? Math.round((applied / quote) * 100) : 0
 
-    lines.push(`📋 ${job.description}`)
+    lines.push(`🔹 ${job.description}`)
     lines.push(
-      `   Quote: KES ${quote.toLocaleString()} | Paid: KES ${applied.toLocaleString()} | Bal: KES ${remaining.toLocaleString()} (${pct}%)`
+      `   Quote: KES ${quote.toLocaleString()} · Paid: KES ${applied.toLocaleString()} · Bal: KES ${remaining.toLocaleString()} (${pct}%)`
     )
   }
 
   const owes = Math.max(0, totalQuote - netPaid)
   const overpaid = Math.max(0, netPaid - totalQuote)
 
-  lines.push(`\n💼 Jobs Total: KES ${totalQuote.toLocaleString()}`)
+  lines.push(`\n🧾 Jobs Total: KES ${totalQuote.toLocaleString()}`)
   lines.push(`💰 Total Paid: KES ${totalCredits.toLocaleString()}`)
   if (totalDebits > 0) {
     lines.push(`💸 Paid Out: KES ${totalDebits.toLocaleString()}`)
     lines.push(`💰 Net Paid: KES ${netPaid.toLocaleString()}`)
   }
   if (overpaid > 0) {
-    lines.push(`✅ Credit: KES ${overpaid.toLocaleString()}`)
+    lines.push(`🎉 Credit: KES ${overpaid.toLocaleString()}`)
   } else {
     lines.push(`⏳ Owes: KES ${owes.toLocaleString()}`)
   }
@@ -262,13 +266,13 @@ async function handleAIPayment(
       .eq('mpesa_code', data.code)
       .maybeSingle()
     if (dup) {
-      return twimlResponse('ℹ️ Payment isha-recordiwa.')
+      return twimlResponse('ℹ️ Payment hii isha-recordiwa tayari.')
     }
   }
 
   const customer = await resolveCustomer(tenantId, data.customer_name, data.customer_phone)
   if (!customer) {
-    return twimlResponse('⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.')
+    return twimlResponse('😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.')
   }
 
   const { error: txError } = await supabaseAdmin.from('transactions').insert({
@@ -284,7 +288,7 @@ async function handleAIPayment(
 
   if (txError) {
     console.error('Transaction insert failed:', txError)
-    return twimlResponse('⚠️ Kuna tatizo la save payment. Tafadhali try tena baadaye.')
+    return twimlResponse('😕 Kuna tatizo la save payment. Tafadhali jaribu tena baadaye.')
   }
 
   const txLabel = data.transaction_type === 'credit' ? 'Umepokea' : 'Umetuma'
@@ -292,7 +296,7 @@ async function handleAIPayment(
   return twimlResponse(
     `✅ ${txLabel} KES ${data.amount.toLocaleString()} ${direction} ${customer.name}.` +
       (data.code ? `\n📱 M-Pesa: ${data.code}` : '') +
-      `\nTuma "Bal ${customer.name}" kuona balance.`
+      `\n\n💡 Tuma "Bal ${customer.name}" kuona balance.`
   )
 }
 
@@ -347,11 +351,11 @@ async function handleMpesaPayment(tenantId: string, messageText: string) {
   ])
 
   if (dupResult.data) {
-    return twimlResponse('ℹ️ Payment isha-recordiwa.')
+    return twimlResponse('ℹ️ Payment hii isha-recordiwa tayari.')
   }
 
   if (!customer) {
-    return twimlResponse('⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.')
+    return twimlResponse('😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.')
   }
 
   // Insert transaction
@@ -368,12 +372,12 @@ async function handleMpesaPayment(tenantId: string, messageText: string) {
 
   if (txError) {
     console.error('Transaction insert failed:', txError)
-    return twimlResponse('⚠️ Kuna tatizo la save payment. Tafadhali try tena baadaye.')
+    return twimlResponse('😕 Kuna tatizo la save payment. Tafadhali jaribu tena baadaye.')
   }
 
   const txLabel = txType === 'credit' ? 'Umepokea' : 'Umetuma'
   return twimlResponse(
-    `✅ ${txLabel} KES ${amount} ${txType === 'credit' ? 'kutoka kwa' : 'kwa'} ${customer.name}.\nTuma "Bal ${customer.name}" kuona balance.`
+    `✅ ${txLabel} KES ${amount} ${txType === 'credit' ? 'kutoka kwa' : 'kwa'} ${customer.name}.\n\n💡 Tuma "Bal ${customer.name}" kuona balance.`
   )
 }
 
@@ -381,45 +385,177 @@ async function handleMpesaPayment(tenantId: string, messageText: string) {
 async function handleWhatsAppLogin(tenantId: string) {
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('owner_email, user_id')
+    .select('user_id')
     .eq('id', tenantId)
     .single()
 
-  // Fall back to auth.users email if owner_email not set yet
-  let email = tenant?.owner_email
-  if (!email && tenant?.user_id) {
-    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(tenant.user_id)
-    email = authUser?.user?.email ?? ''
-    // Backfill owner_email
-    if (email) {
-      await supabaseAdmin.from('tenants').update({ owner_email: email }).eq('id', tenantId)
+  if (!tenant?.user_id) {
+    return twimlResponse(
+      '🔒 Hakuna akaunti iliyounganishwa na nambari hii.\n' +
+        'Ingia kwanza kwa browser kupata akaunti yako iungane na WhatsApp.'
+    )
+  }
+
+  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(
+    tenant.user_id
+  )
+
+  const email = authUser?.user?.email
+  if (authError || !email) {
+    return twimlResponse('🔒 Hakuna email iliyohusishwa na akaunti yako. Ingia kwa email kwanza.')
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+  // Let Supabase handle the magic link — it sends the email with a secure token
+  const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${appUrl}/auth/callback?next=/customers`,
+  })
+
+  // inviteUserByEmail fails if user already exists, fall back to generateLink + signIn
+  if (error) {
+    // Use the regular OTP flow — Supabase sends the magic link email
+    const { error: otpError } = await supabaseAdmin.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${appUrl}/auth/callback?next=/customers` },
+    })
+
+    if (otpError) {
+      console.error('[Login] OTP send failed:', otpError)
+      return twimlResponse('😕 Tatizo la kutuma login link. Jaribu tena.')
     }
   }
 
-  if (!email) {
-    return twimlResponse('⚠️ Hakuna email iliyohusishwa na akaunti yako. Ingia kwa email kwanza.')
-  }
-
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('.supabase.co', '.app') ??
-    ''
-
-  const { data, error } = await supabaseAdmin.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-    options: { redirectTo: `${appUrl}/customers` },
-  })
-
-  if (error || !data.properties?.hashed_token) {
-    console.error('Magic link generation failed:', error)
-    return twimlResponse('⚠️ Tatizo la kuunda login link. Jaribu tena.')
-  }
-
-  const loginUrl = `${appUrl}/auth/callback?token_hash=${data.properties.hashed_token}&type=email&next=/customers`
+  // Mask email for privacy: fa***@gmail.com
+  const [local, domain] = email.split('@')
+  const masked = local.slice(0, 2) + '***@' + domain
 
   return twimlResponse(
-    `🔐 Bonyeza link hii kuingia:\n${loginUrl}\n\n⏰ Link itaisha baada ya dakika 60.`
+    `📧 Tumetuma login link kwa ${masked}.\n` +
+      'Fungua email yako ubonyeze link hiyo kuingia 🔓\n\n' +
+      '⏳ Link itaisha baada ya saa 1.'
+  )
+}
+
+// ─── Reports ───
+function getDateRange(period: 'today' | 'week' | 'month' | 'all'): { from: string; label: string } {
+  const now = new Date()
+  switch (period) {
+    case 'today': {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      return { from: start.toISOString(), label: 'Leo' }
+    }
+    case 'week': {
+      const day = now.getDay()
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day)
+      return { from: start.toISOString(), label: 'Wiki hii' }
+    }
+    case 'month': {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      return { from: start.toISOString(), label: 'Mwezi huu' }
+    }
+    case 'all':
+      return { from: '2000-01-01T00:00:00Z', label: 'Jumla' }
+  }
+}
+
+async function handleReport(
+  tenantId: string,
+  report: 'unpaid' | 'income' | 'summary',
+  period: 'today' | 'week' | 'month' | 'all'
+) {
+  const { from, label } = getDateRange(period)
+
+  if (report === 'unpaid') {
+    // Get open jobs with customer names
+    let query = supabaseAdmin
+      .from('jobs')
+      .select('description, total_quote, created_at, customers(name)')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+
+    if (period !== 'all') {
+      query = query.gte('created_at', from)
+    }
+
+    const { data: jobs } = await query.limit(20)
+
+    if (!jobs || jobs.length === 0) {
+      return twimlResponse(`🎉 Hakuna deni ${label.toLowerCase()}. Safi!`)
+    }
+
+    const total = jobs.reduce((s, j) => s + Number(j.total_quote), 0)
+    const lines = [`📊 Deni — ${label}:\n`]
+
+    for (const job of jobs) {
+      const customer = (job.customers as unknown as { name: string })?.name ?? 'Unknown'
+      lines.push(`  👤 ${customer} — KES ${Number(job.total_quote).toLocaleString()}`)
+      lines.push(`     🔹 ${job.description}`)
+    }
+
+    lines.push(`\n💰 Jumla: KES ${total.toLocaleString()}`)
+    lines.push(`🧾 Jobs: ${jobs.length}`)
+    return twimlResponse(lines.join('\n'))
+  }
+
+  if (report === 'income') {
+    let query = supabaseAdmin
+      .from('transactions')
+      .select('amount, type, created_at, customers(name)')
+      .eq('tenant_id', tenantId)
+      .eq('type', 'credit')
+      .eq('status', 'paid')
+      .order('created_at', { ascending: false })
+
+    if (period !== 'all') {
+      query = query.gte('created_at', from)
+    }
+
+    const { data: txns } = await query.limit(30)
+
+    if (!txns || txns.length === 0) {
+      return twimlResponse(`📊 Hakuna mapato ${label.toLowerCase()}.`)
+    }
+
+    const total = txns.reduce((s, t) => s + Number(t.amount), 0)
+    const lines = [`📊 Mapato — ${label}:\n`]
+
+    for (const txn of txns) {
+      const customer = (txn.customers as unknown as { name: string })?.name ?? 'Unknown'
+      lines.push(`  💵 KES ${Number(txn.amount).toLocaleString()} — ${customer}`)
+    }
+
+    lines.push(`\n💰 Jumla: KES ${total.toLocaleString()}`)
+    lines.push(`🧾 Transactions: ${txns.length}`)
+    return twimlResponse(lines.join('\n'))
+  }
+
+  // summary
+  const [jobsResult, incomeResult, expenseResult] = await Promise.all([
+    period !== 'all'
+      ? supabaseAdmin.from('jobs').select('total_quote').eq('tenant_id', tenantId).eq('status', 'open').gte('created_at', from)
+      : supabaseAdmin.from('jobs').select('total_quote').eq('tenant_id', tenantId).eq('status', 'open'),
+    period !== 'all'
+      ? supabaseAdmin.from('transactions').select('amount').eq('tenant_id', tenantId).eq('type', 'credit').eq('status', 'paid').gte('created_at', from)
+      : supabaseAdmin.from('transactions').select('amount').eq('tenant_id', tenantId).eq('type', 'credit').eq('status', 'paid'),
+    period !== 'all'
+      ? supabaseAdmin.from('transactions').select('amount').eq('tenant_id', tenantId).eq('type', 'debit').eq('status', 'paid').gte('created_at', from)
+      : supabaseAdmin.from('transactions').select('amount').eq('tenant_id', tenantId).eq('type', 'debit').eq('status', 'paid'),
+  ])
+
+  const openJobs = jobsResult.data?.length ?? 0
+  const totalOwed = (jobsResult.data ?? []).reduce((s, j) => s + Number(j.total_quote), 0)
+  const totalIncome = (incomeResult.data ?? []).reduce((s, t) => s + Number(t.amount), 0)
+  const totalExpense = (expenseResult.data ?? []).reduce((s, t) => s + Number(t.amount), 0)
+
+  return twimlResponse(
+    `📊 Muhtasari — ${label}:\n\n` +
+      `🧾 Open Jobs: ${openJobs}\n` +
+      `⏳ Deni: KES ${totalOwed.toLocaleString()}\n` +
+      `💵 Mapato: KES ${totalIncome.toLocaleString()}\n` +
+      `💸 Matumizi: KES ${totalExpense.toLocaleString()}\n` +
+      `💰 Net: KES ${(totalIncome - totalExpense).toLocaleString()}`
   )
 }
 
@@ -432,22 +568,22 @@ export async function POST(request: NextRequest) {
     const tenant_phone = body['From']?.toString().replace('whatsapp:', '')
 
     if (!message_text || !tenant_phone) {
-      return twimlResponse('⚠️ Message haikueleweka. Tafadhali tuma tena.')
+      return twimlResponse('😕 Message haikueleweka. Tafadhali tuma tena.')
     }
 
     const tenantId = await resolveTenant(tenant_phone)
     if (!tenantId) {
-      return twimlResponse('⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.')
+      return twimlResponse('😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.')
     }
 
     // 1. AI-powered intent parsing via Gemini — all messages go through AI
-    let intent: Awaited<ReturnType<typeof parseWithGemini>>
+    let intent: Awaited<ReturnType<typeof parseWithAI>>
 
     try {
-      intent = await parseWithGemini(message_text)
-      console.log('Gemini parsed:', intent.type, '→', intent.raw_summary)
+      intent = await parseWithAI(message_text)
+      console.log('AI parsed:', intent.type, '→', intent.raw_summary)
     } catch (error) {
-      console.error('Gemini parsing failed, falling back to regex:', error)
+      console.error('AI parsing failed, falling back to regex:', error)
       // Fallback: try regex parsers when AI is unavailable
       const mpesaResult = await handleMpesaPayment(tenantId, message_text)
       if (mpesaResult) return mpesaResult
@@ -473,22 +609,36 @@ export async function POST(request: NextRequest) {
         })
       case 'QUERY':
         return handleBalanceQuery(tenantId, intent.data.target_name)
+      case 'REPORT':
+        return handleReport(tenantId, intent.data.report, intent.data.period)
       case 'LOGIN':
         return handleWhatsAppLogin(tenantId)
       case 'UNKNOWN':
       default:
         return twimlResponse(
-          '🤔 Sijui message hii. Jaribu moja ya hizi:\n\n' +
-            '📋 Unda job: "Job Jane 1000 Print business cards"\n' +
-            '   Au kwa Kiswahili: "nimefanya kazi ya Jane bei 1000 business cards"\n\n' +
-            '💰 Angalia balance: "Bal Jane" au "Jane ananidai ngapi"\n\n' +
-            '📲 Forward M-Pesa SMS → itarekodiwa automatically\n\n' +
-            '💵 Rekodi payment: "Ameleta 500" au "Nimepewa 200 na Juma"\n\n' +
-            '🔐 Tuma "Login" kupata link ya kuingia'
+          '👋 Hujambo! Sijui message hii.\n' +
+            'Hizi ndizo unazoweza kufanya:\n\n' +
+            '🛠 *Unda Job*\n' +
+            '  "Job Jane 1000 Print business cards"\n' +
+            '  "nimefanya kazi ya Jane bei 1000 business cards"\n\n' +
+            '👤 *Angalia Balance*\n' +
+            '  "Bal Jane" au "Jane ananidai ngapi"\n\n' +
+            '📊 *Ripoti*\n' +
+            '  "deni za leo" — madeni ya leo\n' +
+            '  "deni za wiki hii" — madeni ya wiki\n' +
+            '  "mapato ya mwezi huu" — income ya mwezi\n' +
+            '  "unpaid bills today"\n' +
+            '  "how much have I made this week"\n' +
+            '  "muhtasari" au "summary" — overview kamili\n\n' +
+            '💳 *Rekodi Payment*\n' +
+            '  "Ameleta 500" au "Nimepewa 200 na Juma"\n' +
+            '  Au forward M-Pesa SMS moja kwa moja\n\n' +
+            '🔑 *Login*\n' +
+            '  Tuma "Login" kupata link kwa email'
         )
     }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return twimlResponse('⚠️ Kuna tatizo. Tafadhali try tena baadaye.')
+    return twimlResponse('😕 Kuna tatizo. Tafadhali jaribu tena baadaye.')
   }
 }

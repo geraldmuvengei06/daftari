@@ -35,14 +35,24 @@ export default function LoginPage() {
   const checkedHash = useRef(false)
 
   // Auto-handle magic link hash fragments (#access_token=...)
+  // Also handle error fragments from failed/expired magic links
   useEffect(() => {
     if (checkedHash.current) return
     checkedHash.current = true
 
     const hash = window.location.hash.substring(1)
-    if (!hash.includes('access_token')) return
+    if (!hash) return
 
     const params = new URLSearchParams(hash)
+
+    // Handle error from expired/invalid magic links
+    const errorDesc = params.get('error_description')
+    if (errorDesc) {
+      setErrors({ email: errorDesc.replace(/\+/g, ' ') })
+      window.history.replaceState(null, '', window.location.pathname)
+      return
+    }
+
     const accessToken = params.get('access_token')
     const refreshToken = params.get('refresh_token')
     if (!accessToken || !refreshToken) return
