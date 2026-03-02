@@ -1,108 +1,86 @@
-# AI-Powered Message Parsing Strategy
+# AI-Powered Message Parsing with Google Gemini
 
-## Problem
+## The Idea
 
-Current WhatsApp bot relies on rigid regex patterns:
-- `Job <Name> <Amount> <Description>`
-- `Bal <Name>`
-- M-Pesa SMS pattern matching
+Daftari is a WhatsApp-based business management tool for Kenyan SMEs. Users send messages to manage jobs, track payments, and check balances. The original bot relied on rigid regex patterns like `Job <Name> <Amount> <Description>` — any deviation (Swahili phrasing, different word order, typos) would fail silently.
 
-Users must remember exact syntax. Any deviation (Swahili phrasing, different word order, typos) fails silently and returns the "I don't understand" fallback.
+The core insight: **use an LLM as an intelligent router**. Instead of pattern-matching strings, let AI understand what the user *means* and translate natural language into structured API calls. The AI doesn't execute business logic — it parses intent and extracts structured data, then the existing handlers take over.
 
-## Goal
+## Why Gemini
 
-Replace regex-based parsing with an LLM call that understands natural language (English + Swahili) and returns structured JSON for routing.
+Google Gemini 2.0 Flash is the backbone of this parsing layer:
 
-## Examples of What Should Work
+- **Structured JSON output** via `responseMimeType: "application/json"` — guaranteed valid JSON, no parsing gymnastics
+- **Multilingual understanding** — users mix English, Swahili, and Sheng freely; Gemini handles all three natively
+- **Speed** — Flash models respond in ~200-400ms, well within WhatsApp's async webhook tolerance
+- **Cost** — at the free tier (15 RPM, 1M TPM) this is essentially zero-cost for early-stage usage
 
-| User message | Extracted intent |
-|---|---|
-| "Job Jane 1000 Print business cards" | `{ intent: "job", customer: "Jane", amount: 1000, description: "Print business cards" }` |
-| "nimefanya kazi ya Jane bei 1000 business cards" | Same as above |
-| "jane ananidai ngapi" | `{ intent: "balance", customer: "Jane" }` |
-| "Bal Jane" | `{ intent: "balance", customer: "Jane" }` |
-| "Login" | `{ intent: "login" }` |
-| (forwarded M-Pesa SMS) | `{ intent: "mpesa", raw: true }` — skip AI, use existing regex |
-| "hello" / random text | `{ intent: "unknown" }` |
+## Architecture: Gemini as the Intelligent Router
 
-## Architecture
+Every incoming message flows through Gemini, which classifies it into one of five intent types and extracts structured data. The existing business logic handlers remain untouched — Gemini just replaces the brittle regex layer.
 
 ```
-Incoming message
+Incoming WhatsApp message
     │
-    ├─ Quick check: is it an M-Pesa SMS? (regex, no AI needed)
-    │   └─ Yes → existing handleMpesaPayment()
-    │
-    └─ No → send to parseWithAI(message)
+    └─ parseWithGemini(message)
         │
-        ├─ Returns { intent, ...structured fields }
+        ├─ Returns { type, data, raw_summary }
         │
-        ├─ intent: "job"     → handleJobCreation(tenantId, { customer, amount, description })
-        ├─ intent: "balance" → handleBalanceQuery(tenantId, customer)
-        ├─ intent: "login"   → handleWhatsAppLogin(tenantId)
-        └─ intent: "unknown" → send help message
+        ├─ type: "PAYMENT" → handleAIPayment()
+        │   ├─ M-Pesa SMS (with code) → dedup + record
+        │   └─ Informal ("Ameleta 500") → record without code
+        │
+        ├─ type: "JOB"     → handleJobCreation()
+        ├─ type: "QUERY"   → handleBalanceQuery()
+        ├─ type: "LOGIN"   → handleWhatsAppLogin()
+        └─ type: "UNKNOWN" → send help message
+        
+    ⚠️ If Gemini API fails → fall back to original regex parsers
 ```
 
-M-Pesa messages bypass AI entirely — they have a very distinct format and the existing regex is reliable for them. No point spending tokens on those.
+## What Gemini Parses
 
-## LLM Provider Options
-
-| Provider | Model | Cost (per 1M input tokens) | Structured output | Notes |
-|---|---|---|---|---|
-| OpenAI | gpt-4o-mini | ~$0.15 | JSON mode / function calling | Best structured output support |
-| Google | Gemini 2.0 Flash | Free tier available | JSON mode | Free tier = 15 RPM, 1M TPM |
-| Anthropic | Claude Haiku | ~$0.25 | Tool use | Good at Swahili |
-
-**Recommendation:** Start with OpenAI `gpt-4o-mini` — cheapest paid option, best JSON mode support, fast (~200ms for short prompts). At ~$0.15/1M tokens, processing 1000 messages/day costs roughly $0.01/day.
-
-Gemini Flash free tier is viable for early stage but has rate limits that could bite at scale.
-
-## System Prompt Design
-
-```
-You are a message parser for a Kenyan business management bot.
-Users send messages in English or Swahili (or a mix).
-
-Extract the intent and structured data. Return JSON only.
-
-Intents:
-- "job": Creating a job/work order. Extract: customer (name), amount (number), description (string).
-- "balance": Checking customer balance. Extract: customer (name).
-- "login": User wants a login link. No extra fields.
-- "unknown": Message doesn't match any intent.
-
-Rules:
-- Amount must be a positive number. If no amount given for a job, return intent "unknown".
-- Customer name should be title-cased.
-- If ambiguous, prefer "unknown" over guessing.
-```
-
-## Implementation Plan
-
-1. Add `OPENAI_API_KEY` to env
-2. Create `lib/ai-parser.ts` with `parseWithAI(message: string)` function
-3. Use OpenAI's `response_format: { type: "json_object" }` for guaranteed JSON
-4. Update `processAndReply()` in the webhook route:
-   - Keep M-Pesa regex check first (no AI)
-   - Replace `parseJobMessage()` / `parseBalanceQuery()` / login regex with single `parseWithAI()` call
-   - Route based on returned intent
-5. Add fallback: if AI call fails (timeout, API down), fall back to existing regex parsers
-
-## Cost Estimate
-
-- Average message: ~50 tokens input + ~30 tokens system prompt overhead
-- gpt-4o-mini: ~$0.15 / 1M input tokens
-- 100 messages/day = ~8,000 tokens/day = $0.0012/day ≈ KES 0.15/day
-- 1000 messages/day ≈ KES 1.5/day
-
-Essentially free compared to the old Twilio costs.
-
-## Risks & Mitigations
-
-| Risk | Mitigation |
+| User message | Gemini output |
 |---|---|
-| LLM latency adds delay | gpt-4o-mini is ~200-400ms; webhook already responds async |
-| API downtime | Fall back to regex parsers |
-| Hallucinated customer names | Fuzzy match against existing customers in DB (already doing this) |
-| Prompt injection via WhatsApp | System prompt is server-side only; user input is clearly delineated |
-| Cost creep at scale | Monitor token usage; switch to Gemini free tier if needed |
+| "Job Jane 1000 Print business cards" | `{ type: "JOB", data: { customer_name: "Jane", total_price: 1000, description: "Print business cards" } }` |
+| "nimefanya kazi ya Jane bei 1000 business cards" | Same — Swahili works naturally |
+| "Printing 200 cards for Kamau at 1500 bob" | `{ type: "JOB", data: { customer_name: "Kamau", total_price: 1500, description: "Printing 200 cards" } }` |
+| "jane ananidai ngapi" | `{ type: "QUERY", data: { target_name: "Jane", intent: "BALANCE" } }` |
+| "Ameleta 500" | `{ type: "PAYMENT", data: { amount: 500, customer_name: inferred, code: null } }` |
+| "Nimepewa 200 na Juma leo" | `{ type: "PAYMENT", data: { amount: 200, customer_name: "Juma", code: null } }` |
+| Forwarded M-Pesa SMS | `{ type: "PAYMENT", data: { amount: 500, code: "QK78RT4X5M", customer_name: "John Doe" } }` |
+| "Login" | `{ type: "LOGIN" }` |
+| "hello" / random text | `{ type: "UNKNOWN" }` |
+
+## Key Enhancement: Informal Payments
+
+The biggest win over regex: Gemini understands informal payment descriptions in Sheng/Swahili. "Ameleta 500" (they brought 500), "Jane amelipa 1000" (Jane has paid 1000) — these are natural ways Kenyan business owners talk about transactions. Regex can't touch this. Gemini gets it instantly.
+
+## System Prompt
+
+The system prompt positions Gemini as a specialized financial assistant for Kenyan solopreneurs. It handles:
+
+- **M-Pesa SMS parsing** — extracts transaction code, amount, customer name/phone, date, credit/debit direction
+- **Informal payment recognition** — Sheng phrases like "Ameleta 500" mapped to structured payment data
+- **Job creation** — natural language descriptions of work orders with customer, price, and description
+- **Balance queries** — any form of "how much does X owe" in English, Swahili, or Sheng
+- **Login requests** — various phrasings mapped to login intent
+
+Every response includes a `raw_summary` field — a human-readable summary of what Gemini understood, useful for debugging and logging.
+
+## Resilience: Regex Fallback
+
+If the Gemini API is down or times out, the route falls back to the original regex parsers. The old `parseJobMessage()`, `parseBalanceQuery()`, and `handleMpesaPayment()` functions are still in the codebase. Users get degraded (rigid syntax only) but functional service.
+
+## Cost Reality
+
+- Average message: ~50 tokens input + ~80 tokens system prompt
+- Gemini 2.0 Flash free tier: 15 requests/minute, 1M tokens/day
+- For a small business doing 100 messages/day: comfortably within free tier
+- Even at 1000 messages/day on paid tier: ~$0.01/day
+
+## Implementation Files
+
+- `lib/ai-parser.ts` — `parseWithGemini()` function, types, system prompt
+- `app/api/whatsapp/route.ts` — webhook handler with AI routing + regex fallback
+- `.env` — `GEMINI_API_KEY` and `GEMINI_MODEL` configuration

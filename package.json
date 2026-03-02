@@ -10,11 +10,11 @@
     "lint:fix": "eslint --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky",
     "prepare": "husky"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
+    "@google/genai": "^1.43.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.98.0",
     "class-variance-authority": "^0.7.1",

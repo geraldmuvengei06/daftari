@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { parseWithGemini } from '@/lib/ai-parser'
 
 function twimlResponse(message: string) {
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -87,12 +88,10 @@ function parseJobMessage(text: string) {
 
 async function handleJobCreation(
   tenantId: string,
-  parsed: { customerName: string; amount: number; description: string }
+  parsed: { customerName: string; items: { description: string; quantity: number; unit_price: number; total: number }[] }
 ) {
-  // Normalize name: collapse multiple spaces
   const normalizedName = parsed.customerName.replace(/\s+/g, ' ').trim()
 
-  // Search by name (fuzzy) OR by phone containing the name
   const { data: customers } = await supabaseAdmin
     .from('customers')
     .select('id, name')
@@ -107,7 +106,6 @@ async function handleJobCreation(
     customerId = customers[0].id
     customerName = customers[0].name
   } else {
-    // Create customer with name as phone placeholder
     const { data: newCust, error } = await supabaseAdmin
       .from('customers')
       .insert({ name: normalizedName, phone: normalizedName, tenant_id: tenantId })
@@ -118,22 +116,36 @@ async function handleJobCreation(
     customerName = newCust.name
   }
 
-  const { error } = await supabaseAdmin.from('jobs').insert({
+  // Insert one job per line item
+  const jobRows = parsed.items.map((item) => ({
     tenant_id: tenantId,
     customer_id: customerId,
-    description: parsed.description,
-    total_quote: parsed.amount,
-  })
+    description: item.quantity > 1
+      ? `${item.description} (${item.quantity} × KES ${item.unit_price.toLocaleString()})`
+      : item.description,
+    total_quote: item.total,
+  }))
 
+  const { error } = await supabaseAdmin.from('jobs').insert(jobRows)
   if (error) return twimlResponse('⚠️ Tatizo la kuunda job card. Jaribu tena.')
 
-  return twimlResponse(
-    `📋 Job Card imeundwa!\n` +
-      `👤 ${customerName}\n` +
-      `💰 Quote: KES ${parsed.amount.toLocaleString()}\n` +
-      `📝 ${parsed.description}\n\n` +
-      `Tuma M-Pesa message kupata payment ikirekodiwa automatically.`
-  )
+  const grandTotal = parsed.items.reduce((s, i) => s + i.total, 0)
+
+  // Build response
+  const lines = [`📋 Job Card${parsed.items.length > 1 ? 's' : ''} imeundwa!`, `👤 ${customerName}`]
+  for (const item of parsed.items) {
+    if (item.quantity > 1) {
+      lines.push(`  📝 ${item.description} — ${item.quantity} × KES ${item.unit_price.toLocaleString()} = KES ${item.total.toLocaleString()}`)
+    } else {
+      lines.push(`  📝 ${item.description} — KES ${item.total.toLocaleString()}`)
+    }
+  }
+  if (parsed.items.length > 1) {
+    lines.push(`💰 Total: KES ${grandTotal.toLocaleString()}`)
+  }
+  lines.push('', 'Tuma M-Pesa message kupata payment ikirekodiwa automatically.')
+
+  return twimlResponse(lines.join('\n'))
 }
 
 // ─── Balance Query ───
@@ -229,7 +241,62 @@ async function handleBalanceQuery(tenantId: string, customerName: string) {
   return twimlResponse(lines.join('\n'))
 }
 
-// ─── M-Pesa Payment Processing ───
+// ─── AI-Parsed Payment Processing ───
+async function handleAIPayment(
+  tenantId: string,
+  data: {
+    amount: number
+    code: string | null
+    customer_name: string
+    customer_phone: string | null
+    transaction_type: 'credit' | 'debit'
+    transaction_date: string | null
+  },
+  rawText: string
+) {
+  // Check for duplicate M-Pesa code if present
+  if (data.code) {
+    const { data: dup } = await supabaseAdmin
+      .from('transactions')
+      .select('id')
+      .eq('mpesa_code', data.code)
+      .maybeSingle()
+    if (dup) {
+      return twimlResponse('ℹ️ Payment isha-recordiwa.')
+    }
+  }
+
+  const customer = await resolveCustomer(tenantId, data.customer_name, data.customer_phone)
+  if (!customer) {
+    return twimlResponse('⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.')
+  }
+
+  const { error: txError } = await supabaseAdmin.from('transactions').insert({
+    mpesa_code: data.code,
+    amount: data.amount,
+    type: data.transaction_type,
+    status: 'paid',
+    raw_text: rawText,
+    tenant_id: tenantId,
+    customer_id: customer.id,
+    transaction_date: data.transaction_date,
+  })
+
+  if (txError) {
+    console.error('Transaction insert failed:', txError)
+    return twimlResponse('⚠️ Kuna tatizo la save payment. Tafadhali try tena baadaye.')
+  }
+
+  const txLabel = data.transaction_type === 'credit' ? 'Umepokea' : 'Umetuma'
+  const direction = data.transaction_type === 'credit' ? 'kutoka kwa' : 'kwa'
+  return twimlResponse(
+    `✅ ${txLabel} KES ${data.amount.toLocaleString()} ${direction} ${customer.name}.` +
+      (data.code ? `\n📱 M-Pesa: ${data.code}` : '') +
+      `\nTuma "Bal ${customer.name}" kuona balance.`
+  )
+}
+
+// ─── M-Pesa Payment Processing (regex fallback) ───
 async function handleMpesaPayment(tenantId: string, messageText: string) {
   if (/Fuliza\s+M-PESA/i.test(messageText)) {
     return twimlResponse('ℹ️ Fuliza payments hazirekodiwa kwa sasa.')
@@ -373,38 +440,53 @@ export async function POST(request: NextRequest) {
       return twimlResponse('⚠️ Kuna tatizo la system. Tafadhali try tena baadaye.')
     }
 
-    // 1. Login request: "Login"
-    if (/^login$/i.test(message_text.trim())) {
-      return handleWhatsAppLogin(tenantId)
+    // 1. AI-powered intent parsing via Gemini — all messages go through AI
+    let intent: Awaited<ReturnType<typeof parseWithGemini>>
+
+    try {
+      intent = await parseWithGemini(message_text)
+      console.log('Gemini parsed:', intent.type, '→', intent.raw_summary)
+    } catch (error) {
+      console.error('Gemini parsing failed, falling back to regex:', error)
+      // Fallback: try regex parsers when AI is unavailable
+      const mpesaResult = await handleMpesaPayment(tenantId, message_text)
+      if (mpesaResult) return mpesaResult
+      if (/^login$/i.test(message_text.trim())) return handleWhatsAppLogin(tenantId)
+      const jobParsed = parseJobMessage(message_text)
+      if (jobParsed) return handleJobCreation(tenantId, {
+          customerName: jobParsed.customerName,
+          items: [{ description: jobParsed.description, quantity: 1, unit_price: jobParsed.amount, total: jobParsed.amount }],
+        })
+      const balanceName = parseBalanceQuery(message_text)
+      if (balanceName) return handleBalanceQuery(tenantId, balanceName)
+      return twimlResponse('🤔 Sijui message hii. Jaribu tena.')
     }
 
-    // 2. Check for Job creation: "Job <Name> <Amount> <Description>"
-    const jobParsed = parseJobMessage(message_text)
-    if (jobParsed) {
-      return handleJobCreation(tenantId, jobParsed)
+    // 2. Route based on AI-parsed intent
+    switch (intent.type) {
+      case 'PAYMENT':
+        return handleAIPayment(tenantId, intent.data, message_text)
+      case 'JOB':
+        return handleJobCreation(tenantId, {
+          customerName: intent.data.customer_name,
+          items: intent.data.items,
+        })
+      case 'QUERY':
+        return handleBalanceQuery(tenantId, intent.data.target_name)
+      case 'LOGIN':
+        return handleWhatsAppLogin(tenantId)
+      case 'UNKNOWN':
+      default:
+        return twimlResponse(
+          '🤔 Sijui message hii. Jaribu moja ya hizi:\n\n' +
+            '📋 Unda job: "Job Jane 1000 Print business cards"\n' +
+            '   Au kwa Kiswahili: "nimefanya kazi ya Jane bei 1000 business cards"\n\n' +
+            '💰 Angalia balance: "Bal Jane" au "Jane ananidai ngapi"\n\n' +
+            '📲 Forward M-Pesa SMS → itarekodiwa automatically\n\n' +
+            '💵 Rekodi payment: "Ameleta 500" au "Nimepewa 200 na Juma"\n\n' +
+            '🔐 Tuma "Login" kupata link ya kuingia'
+        )
     }
-
-    // 3. Check for Balance query: "Bal <Name>"
-    const balanceName = parseBalanceQuery(message_text)
-    if (balanceName) {
-      return handleBalanceQuery(tenantId, balanceName)
-    }
-
-    // 4. Try M-Pesa payment processing
-    const mpesaResult = await handleMpesaPayment(tenantId, message_text)
-    if (mpesaResult) {
-      return mpesaResult
-    }
-
-    return twimlResponse(
-      '🤔 Sijui message hii. Jaribu moja ya hizi:\n\n' +
-        '📋 *Job* <Jina> <Amount> <Maelezo>\n' +
-        '   Mfano: Job Jane 1000 Print business cards\n\n' +
-        '💰 *Bal* <Jina>\n' +
-        '   Mfano: Bal Jane\n\n' +
-        '📲 Forward M-Pesa SMS → itarekodiwa automatically\n\n' +
-        '🔐 *Login* → Pata link ya kuingia'
-    )
   } catch (error) {
     console.error('Unexpected error:', error)
     return twimlResponse('⚠️ Kuna tatizo. Tafadhali try tena baadaye.')
