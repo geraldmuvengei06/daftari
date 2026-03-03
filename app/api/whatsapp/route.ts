@@ -46,6 +46,7 @@ function getHelpMessage() {
 
 async function handleRegistration(provider: WhatsAppProvider, phone: string, messageText: string) {
   const tenant = await resolveTenant(phone)
+  const isGetStarted = /^get\s*started$/i.test(messageText.trim())
 
   if (!tenant) {
     const { data: newTenant, error } = await supabaseAdmin
@@ -63,11 +64,15 @@ async function handleRegistration(provider: WhatsAppProvider, phone: string, mes
       return '😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.'
     }
 
+    const welcomeMsg = isGetStarted
+      ? '🎉 Karibu! Asante kwa kuchagua huduma yetu.\n\n'
+      : '👋 Karibu! Tunaona hii ni mara yako ya kwanza kutumia huduma hii.\n\n'
+
     return (
-      '👋 Karibu! Tunaona hii ni mara yako ya kwanza kutumia huduma hii.\n\n' +
+      welcomeMsg +
       `📱 Nambari yako ${phone} imesajiliwa.\n\n` +
-      '📧 Tafadhali tuma email yako ili tukamilishe usajili wako.\n' +
-      'Mfano: juma@gmail.com'
+      '📧 Tafadhali tuma jina lako/biashara yako na email yako.\n' +
+      'Mfano: Juma Electronics, juma@gmail.com'
     )
   }
 
@@ -84,17 +89,32 @@ async function handleRegistration(provider: WhatsAppProvider, phone: string, mes
 }
 
 async function handleAwaitingEmail(tenantId: string, messageText: string): Promise<string> {
-  const text = messageText.trim().toLowerCase()
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const text = messageText.trim()
+  const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/
 
-  if (!emailRegex.test(text)) {
+  // Try to extract email from the message
+  const emailMatch = text.match(emailRegex)
+  if (!emailMatch) {
     return (
-      '📧 Hiyo si email sahihi. Tafadhali tuma email yako.\n' +
-      'Mfano: juma@gmail.com'
+      '📧 Sijapata email sahihi. Tafadhali tuma jina lako/biashara na email.\n' +
+      'Mfano: Juma Electronics, juma@gmail.com'
     )
   }
 
-  const email = text
+  const email = emailMatch[0].toLowerCase()
+  
+  // Extract business name (everything before the email, cleaned up)
+  let businessName = text.replace(emailRegex, '').replace(/[,;:\-]+/g, ' ').trim()
+  if (!businessName || businessName.length < 2) {
+    businessName = 'My Business'
+  }
+
+  // Update business name
+  await supabaseAdmin
+    .from('tenants')
+    .update({ business_name: businessName })
+    .eq('id', tenantId)
+
   const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
   const existingUser = existingUsers?.users?.find(
     (u) => u.email?.toLowerCase() === email
@@ -149,7 +169,7 @@ async function handleAwaitingEmail(tenantId: string, messageText: string): Promi
     console.error('Failed to create auth user:', createError)
     return (
       '😕 Kuna tatizo la kuunda akaunti. Tafadhali jaribu tena.\n' +
-      'Tuma email yako tena.'
+      'Tuma jina na email yako tena.'
     )
   }
 
@@ -174,7 +194,7 @@ async function handleAwaitingEmail(tenantId: string, messageText: string): Promi
   }
 
   return (
-    `✅ Asante! Email yako ${email} imesajiliwa.\n\n` +
+    `✅ Asante${businessName !== 'My Business' ? ` ${businessName}` : ''}! Email yako ${email} imesajiliwa.\n\n` +
     '📬 Tumetuma barua ya uthibitisho kwa email yako.\n' +
     'Fungua email yako ubonyeze link ya uthibitisho.\n\n' +
     '⏳ Baada ya kuthibitisha, tuma message yoyote hapa kuendelea.'
