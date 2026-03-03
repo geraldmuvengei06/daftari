@@ -39,6 +39,27 @@ export const createJobSchema = z.object({
   description: z.string().min(1, 'Description is required').min(3, 'Description is too short'),
 })
 
+export const editJobSchema = z.object({
+  customerId: z.string().min(1, 'Customer is required'),
+  totalQuote: z
+    .string()
+    .min(1, 'Quote amount is required')
+    .refine((v) => !isNaN(Number(v)) && Number(v) > 0, 'Amount must be greater than 0'),
+  description: z.string().min(1, 'Description is required').min(3, 'Description is too short'),
+  status: z.enum(['open', 'closed']),
+})
+
+export const editPaymentSchema = z.object({
+  mpesaCode: z.string().min(1, 'M-Pesa code is required'),
+  amount: z
+    .string()
+    .min(1, 'Amount is required')
+    .refine((v) => !isNaN(Number(v)) && Number(v) > 0, 'Amount must be greater than 0'),
+  status: z.enum(['paid', 'pending', 'failed']),
+  rawText: z.string().optional(),
+  type: z.enum(['credit', 'debit']),
+})
+
 export const featureRequestSchema = z.object({
   title: z.string().min(1, 'Title is required').min(3, 'Title is too short'),
   description: z.string().min(1, 'Description is required').min(10, 'Please provide more detail'),

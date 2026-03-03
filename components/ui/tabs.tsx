@@ -22,12 +22,13 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  'rounded-lg p-[3px] group-data-horizontal/tabs:h-8 data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit items-center justify-center group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col',
+  'rounded-xl p-1 group-data-horizontal/tabs:h-11 data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit items-center justify-center group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col',
   {
     variants: {
       variant: {
-        default: 'bg-muted',
+        default: 'bg-muted/60 backdrop-blur-sm',
         line: 'gap-1 bg-transparent',
+        pills: 'gap-2 bg-transparent p-0',
       },
     },
     defaultVariants: {
@@ -56,10 +57,33 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground/60 hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 group-data-[variant=default]/tabs-list:data-active:shadow-sm group-data-[variant=line]/tabs-list:data-active:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        'group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent',
-        'data-active:bg-background dark:data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 data-active:text-foreground',
-        'after:bg-foreground after:absolute after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100',
+        // Base styles
+        'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring relative inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-sm font-medium whitespace-nowrap transition-all duration-200',
+        // Touch-friendly sizing
+        'min-w-[80px] active:scale-[0.98]',
+        // Vertical tabs
+        'group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start',
+        // Focus states
+        'focus-visible:ring-[3px] focus-visible:outline-1',
+        // Disabled state
+        'disabled:pointer-events-none disabled:opacity-50',
+        // Icon styles
+        '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',
+        // Default inactive state
+        'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+        // Default variant active state
+        'group-data-[variant=default]/tabs-list:data-active:bg-background group-data-[variant=default]/tabs-list:data-active:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-sm',
+        // Dark mode for default variant
+        'dark:group-data-[variant=default]/tabs-list:data-active:border-input dark:group-data-[variant=default]/tabs-list:data-active:bg-input/30',
+        // Line variant styles
+        'group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent',
+        'after:bg-primary after:absolute after:opacity-0 after:transition-all after:duration-200',
+        'group-data-horizontal/tabs:after:inset-x-2 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-horizontal/tabs:after:rounded-full',
+        'group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5',
+        'group-data-[variant=line]/tabs-list:data-active:after:opacity-100',
+        // Pills variant styles
+        'group-data-[variant=pills]/tabs-list:rounded-full group-data-[variant=pills]/tabs-list:border group-data-[variant=pills]/tabs-list:border-border group-data-[variant=pills]/tabs-list:bg-transparent group-data-[variant=pills]/tabs-list:px-5',
+        'group-data-[variant=pills]/tabs-list:data-active:bg-primary group-data-[variant=pills]/tabs-list:data-active:text-primary-foreground group-data-[variant=pills]/tabs-list:data-active:border-primary group-data-[variant=pills]/tabs-list:data-active:shadow-md',
         className
       )}
       {...props}

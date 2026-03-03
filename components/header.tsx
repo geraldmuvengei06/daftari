@@ -121,8 +121,8 @@ export function Header() {
         </div>
       </header>
 
-      <nav className="bg-background fixed right-0 bottom-0 left-0 z-50 border-t sm:hidden">
-        <div className="flex">
+      <nav className="bg-background/80 fixed right-0 bottom-0 left-0 z-50 border-t backdrop-blur-lg sm:hidden">
+        <div className="flex h-16 items-stretch">
           {mobileTabLinks.map((link) => {
             const Icon = link.icon
             const active = pathname.startsWith(link.href)
@@ -131,16 +131,35 @@ export function Header() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-0.5 py-2 text-xs transition-colors',
-                  active ? 'text-primary font-medium' : 'text-muted-foreground'
+                  'relative flex flex-1 flex-col items-center justify-center gap-1 transition-all duration-200 active:scale-95',
+                  active ? 'text-primary' : 'text-muted-foreground'
                 )}
               >
-                <Icon className="size-5" />
-                {link.label}
+                {active && (
+                  <span className="bg-primary absolute top-0 h-0.5 w-8 rounded-full" />
+                )}
+                <span
+                  className={cn(
+                    'flex size-10 items-center justify-center rounded-2xl transition-all duration-200',
+                    active && 'bg-primary/10'
+                  )}
+                >
+                  <Icon className={cn('size-5 transition-transform', active && 'scale-110')} />
+                </span>
+                <span
+                  className={cn(
+                    'text-[10px] font-medium transition-all',
+                    active ? 'opacity-100' : 'opacity-70'
+                  )}
+                >
+                  {link.label}
+                </span>
               </Link>
             )
           })}
         </div>
+        {/* Safe area padding for devices with home indicator */}
+        <div className="h-safe-area-inset-bottom bg-background/80" />
       </nav>
     </>
   )
