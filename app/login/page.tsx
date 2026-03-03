@@ -19,6 +19,7 @@ import {
 import { createSupabaseBrowser } from '@/lib/supabase-browser'
 import { ensureTenant } from '@/lib/actions'
 import { PhoneInput } from '@/components/phone-input'
+import { BackgroundPattern } from '@/components/background-pattern'
 import features from '@/features.json'
 
 // WhatsApp number for onboarding (from env or default)
@@ -87,6 +88,7 @@ export default function LoginPage() {
   if (handlingMagicLink) {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -166,6 +168,7 @@ export default function LoginPage() {
   if (sent === 'phone') {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -218,6 +221,7 @@ export default function LoginPage() {
   if (sent === 'email') {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -250,6 +254,7 @@ export default function LoginPage() {
   if (!features.phoneLogin) {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -323,6 +328,7 @@ export default function LoginPage() {
   // Phone + Email tabs (phone feature enabled)
   return (
     <div className="flex min-h-svh items-center justify-center px-4">
+      <BackgroundPattern />
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="mb-2 flex justify-center">

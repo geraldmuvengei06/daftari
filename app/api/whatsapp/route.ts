@@ -84,7 +84,13 @@ async function handleRegistration(provider: WhatsAppProvider, phone: string, mes
     return handleAwaitingVerification(tenant.id, messageText)
   }
 
-  // registration_state === 'complete' — return null to continue normal flow
+  // registration_state === 'complete'
+  // If user sends "Get Started", show them the help/welcome message
+  if (isGetStarted) {
+    return '🎉 Karibu tena! Akaunti yako iko tayari.\n\n' + getHelpMessage().split('\n').slice(1).join('\n')
+  }
+
+  // Otherwise continue to normal flow
   return null
 }
 

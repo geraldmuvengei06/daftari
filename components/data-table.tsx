@@ -63,7 +63,7 @@ export function DataTable<T>({
   return (
     <div className="space-y-4">
       {/* Desktop table */}
-      <div className="hidden overflow-x-auto rounded-lg border sm:block">
+      <div className="bg-card hidden overflow-x-auto rounded-lg border sm:block">
         <Table>
           <TableHeader>
             <TableRow>
