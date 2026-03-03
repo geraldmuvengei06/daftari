@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PageHeader } from '@/components/page-header'
-import { DataTable, type Column } from '@/components/data-table'
+import { DataTable, type Column, type CardAction } from '@/components/data-table'
 import { CreateJobModal } from '@/components/create-job-modal'
 import { EditJobModal } from '@/components/edit-job-modal'
 import { DeleteConfirmModal } from '@/components/delete-confirm-modal'
@@ -20,7 +20,7 @@ import { getJobs, deleteJob } from '@/lib/actions'
 import type { JobWithProgress, Job } from '@/lib/types'
 import { useRealtimeInserts } from '@/lib/use-realtime'
 import { TableSkeleton } from '@/components/skeletons'
-import { ClipboardList, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { ClipboardList, MoreHorizontal, Pencil, Trash2, User } from 'lucide-react'
 
 const PER_PAGE = 20
 
@@ -43,6 +43,114 @@ function ProgressBar({ paid, total }: { paid: number; total: number }) {
         />
       </div>
       <span className="text-muted-foreground text-xs whitespace-nowrap">{pct}%</span>
+    </div>
+  )
+}
+
+function JobMobileCard(row: JobWithProgress, actions?: CardAction<JobWithProgress>[]) {
+  const pct =
+    Number(row.total_quote) > 0
+      ? Math.min(100, Math.round((row.total_paid / Number(row.total_quote)) * 100))
+      : 0
+  const isComplete = pct >= 100
+
+  return (
+    <div className="bg-card ring-border/50 overflow-hidden rounded-xl shadow-sm ring-1">
+      <div className="flex items-start gap-3 p-4 pb-3">
+        <div
+          className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
+            row.status === 'open' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+          }`}
+        >
+          <ClipboardList className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2">
+            <Badge
+              variant={row.status === 'open' ? 'default' : 'secondary'}
+              className="text-[10px] uppercase"
+            >
+              {row.status}
+            </Badge>
+          </div>
+          <p className="text-foreground line-clamp-2 text-sm font-medium leading-snug">
+            {row.description}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-foreground text-lg font-bold">
+            KES {Number(row.total_quote).toLocaleString()}
+          </p>
+          <p className="text-muted-foreground text-[11px]">quote</p>
+        </div>
+      </div>
+      
+      {/* Customer link + Progress inline */}
+      <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5">
+        <Link
+          href={`/customers/${row.customer_id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-2 hover:underline"
+        >
+          <div className="bg-muted flex size-6 items-center justify-center rounded-full">
+            <User className="size-3.5" />
+          </div>
+          <span className="text-primary text-sm font-medium">{row.customers.name}</span>
+        </Link>
+        
+        {/* Compact progress */}
+        <div className="flex items-center gap-2">
+          <div className="bg-muted h-1.5 w-16 overflow-hidden rounded-full">
+            <div
+              className={`h-full rounded-full transition-all ${isComplete ? 'bg-green-500' : 'bg-primary'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className={`text-xs font-medium ${isComplete ? 'text-green-600' : 'text-muted-foreground'}`}>
+            {pct}%
+          </span>
+        </div>
+      </div>
+
+      {/* Balance if any */}
+      {row.balance > 0 && (
+        <div className="bg-destructive/5 border-t px-4 py-2">
+          <p className="text-destructive text-xs font-medium">
+            Balance: KES {row.balance.toLocaleString()}
+          </p>
+        </div>
+      )}
+
+      {actions && actions.length > 0 && (
+        <div className="flex border-t">
+          {actions.map((action, idx) => (
+            <button
+              key={action.type}
+              onClick={(e) => {
+                e.stopPropagation()
+                action.onClick(row)
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors active:bg-muted ${
+                action.type === 'delete'
+                  ? 'text-destructive hover:bg-destructive/10'
+                  : 'text-foreground hover:bg-muted'
+              } ${idx > 0 ? 'border-l' : ''}`}
+            >
+              {action.type === 'edit' ? (
+                <>
+                  <Pencil className="size-4" />
+                  Edit
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-4" />
+                  Delete
+                </>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -224,6 +332,7 @@ export default function JobsPage() {
             { type: 'edit', onClick: (row) => setEditingJob(row) },
             { type: 'delete', onClick: (row) => setDeletingJob(row) },
           ]}
+          mobileCard={(row, actions) => JobMobileCard(row, actions)}
         />
       )}
 
