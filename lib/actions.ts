@@ -47,6 +47,7 @@ const getTenantId = cache(async (): Promise<string> => {
       owner_phone: user.phone ?? '',
       owner_email: user.email ?? '',
       business_name: 'My Business',
+      registration_state: 'complete',
     })
     .select('id')
     .single()
@@ -62,6 +63,45 @@ export async function getTenant(): Promise<Tenant> {
     .eq('id', tenantId)
     .single()
   if (error || !data) throw new Error('Tenant not found')
+  return data as Tenant
+}
+
+export interface UserProfile {
+  id: string
+  email: string | null
+  phone: string | null
+  lastSignIn: string | null
+  createdAt: string
+}
+
+export async function getUserProfile(): Promise<UserProfile> {
+  const user = await getUser()
+  
+  // Use admin client to get full user details including email
+  const { data: adminUser } = await supabaseAdmin.auth.admin.getUserById(user.id)
+  
+  return {
+    id: user.id,
+    email: adminUser?.user?.email ?? user.email ?? null,
+    phone: adminUser?.user?.phone ?? user.phone ?? null,
+    lastSignIn: adminUser?.user?.last_sign_in_at ?? user.last_sign_in_at ?? null,
+    createdAt: adminUser?.user?.created_at ?? user.created_at,
+  }
+}
+
+export async function updateTenant(input: { business_name: string }) {
+  const tenantId = await getTenantId()
+
+  const { data, error } = await supabaseAdmin
+    .from('tenants')
+    .update({
+      business_name: input.business_name,
+    })
+    .eq('id', tenantId)
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+
   return data as Tenant
 }
 
@@ -89,6 +129,7 @@ export async function ensureTenant(phone: string) {
       owner_phone: phone,
       owner_email: user.email ?? '',
       business_name: 'My Business',
+      registration_state: 'complete',
     })
     .select('id')
     .single()
@@ -188,6 +229,29 @@ export async function createCustomer(input: { name: string; phone: string }) {
   return data as Customer
 }
 
+export async function updateCustomer(id: string, input: { name: string; phone: string }) {
+  const tenantId = await getTenantId()
+  const { data, error } = await supabaseAdmin
+    .from('customers')
+    .update({ name: input.name, phone: input.phone })
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return data as Customer
+}
+
+export async function deleteCustomer(id: string) {
+  const tenantId = await getTenantId()
+  const { error } = await supabaseAdmin
+    .from('customers')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+  if (error) throw new Error(error.message)
+}
+
 // ─── Transactions ───
 
 export async function getTransactions() {
@@ -239,6 +303,46 @@ export async function createTransaction(input: {
     .single()
   if (error) throw new Error(error.message)
   return data as Transaction
+}
+
+export async function updateTransaction(
+  id: string,
+  input: {
+    mpesa_code: string
+    amount: number
+    status: string
+    raw_text?: string
+    type: 'credit' | 'debit'
+    transaction_date?: string
+  }
+) {
+  const tenantId = await getTenantId()
+  const { data, error } = await supabaseAdmin
+    .from('transactions')
+    .update({
+      mpesa_code: input.mpesa_code,
+      amount: input.amount,
+      status: input.status,
+      raw_text: input.raw_text || null,
+      type: input.type,
+      transaction_date: input.transaction_date,
+    })
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return data as Transaction
+}
+
+export async function deleteTransaction(id: string) {
+  const tenantId = await getTenantId()
+  const { error } = await supabaseAdmin
+    .from('transactions')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+  if (error) throw new Error(error.message)
 }
 
 export async function getCustomerTotals(customerId: string) {
@@ -387,6 +491,33 @@ export async function createJob(input: {
     .single()
   if (error) throw new Error(error.message)
   return data as Job
+}
+
+export async function updateJob(
+  id: string,
+  input: { customer_id: string; description: string; total_quote: number; status: 'open' | 'closed' }
+) {
+  const tenantId = await getTenantId()
+  const { data, error } = await supabaseAdmin
+    .from('jobs')
+    .update({
+      customer_id: input.customer_id,
+      description: input.description,
+      total_quote: input.total_quote,
+      status: input.status,
+    })
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return data as Job
+}
+
+export async function deleteJob(id: string) {
+  const tenantId = await getTenantId()
+  const { error } = await supabaseAdmin.from('jobs').delete().eq('id', id).eq('tenant_id', tenantId)
+  if (error) throw new Error(error.message)
 }
 
 export async function closeJob(jobId: string) {

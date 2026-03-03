@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { FieldError } from '@/components/field-error'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Phone, Mail } from 'lucide-react'
+import { Phone, Mail, MessageCircle } from 'lucide-react'
 import {
   loginPhoneSchema,
   loginEmailSchema,
@@ -19,7 +19,18 @@ import {
 import { createSupabaseBrowser } from '@/lib/supabase-browser'
 import { ensureTenant } from '@/lib/actions'
 import { PhoneInput } from '@/components/phone-input'
+import { BackgroundPattern } from '@/components/background-pattern'
 import features from '@/features.json'
+
+// WhatsApp number for onboarding (from env or default)
+const WHATSAPP_BUSINESS_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ''
+
+function getWhatsAppLink() {
+  // Remove any non-digit characters from the number
+  const cleanNumber = WHATSAPP_BUSINESS_NUMBER.replace(/\D/g, '')
+  const message = encodeURIComponent('Get Started')
+  return `https://wa.me/${cleanNumber}?text=${message}`
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -77,6 +88,7 @@ export default function LoginPage() {
   if (handlingMagicLink) {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -156,6 +168,7 @@ export default function LoginPage() {
   if (sent === 'phone') {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -208,6 +221,7 @@ export default function LoginPage() {
   if (sent === 'email') {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -240,6 +254,7 @@ export default function LoginPage() {
   if (!features.phoneLogin) {
     return (
       <div className="flex min-h-svh items-center justify-center px-4">
+        <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <div className="mb-2 flex justify-center">
@@ -273,6 +288,37 @@ export default function LoginPage() {
                 {loading ? 'Sending…' : 'Send magic link'}
               </Button>
             </form>
+
+            {WHATSAPP_BUSINESS_NUMBER && (
+              <>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card text-muted-foreground px-2">New here?</span>
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  asChild
+                >
+                  <a
+                    href={getWhatsAppLink()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MessageCircle className="mr-2 size-4" />
+                    Get started with WhatsApp
+                  </a>
+                </Button>
+                <p className="text-muted-foreground mt-2 text-center text-xs">
+                  Sign up via WhatsApp and manage your business on the go
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -282,6 +328,7 @@ export default function LoginPage() {
   // Phone + Email tabs (phone feature enabled)
   return (
     <div className="flex min-h-svh items-center justify-center px-4">
+      <BackgroundPattern />
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="mb-2 flex justify-center">
@@ -351,6 +398,37 @@ export default function LoginPage() {
               </form>
             </TabsContent>
           </Tabs>
+
+          {WHATSAPP_BUSINESS_NUMBER && (
+            <>
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card text-muted-foreground px-2">New here?</span>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                asChild
+              >
+                <a
+                  href={getWhatsAppLink()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MessageCircle className="mr-2 size-4" />
+                  Get started with WhatsApp
+                </a>
+              </Button>
+              <p className="text-muted-foreground mt-2 text-center text-xs">
+                Sign up via WhatsApp and manage your business on the go
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

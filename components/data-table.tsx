@@ -16,7 +16,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination'
-import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
+import { ChevronRight } from 'lucide-react'
 
 export interface Column<T> {
   key: string
@@ -24,7 +25,14 @@ export interface Column<T> {
   className?: string
   /** When true, this column spans the full width in mobile card view */
   fullRow?: boolean
+  /** When true, this column is hidden in mobile card view (used for actions column) */
+  hideOnMobile?: boolean
   render: (row: T) => React.ReactNode
+}
+
+export interface CardAction<T> {
+  type: 'edit' | 'delete'
+  onClick: (row: T) => void
 }
 
 interface DataTableProps<T> {
@@ -35,6 +43,10 @@ interface DataTableProps<T> {
   onPageChange: (page: number) => void
   onRowClick?: (row: T) => void
   emptyMessage?: string
+  /** Actions to show in mobile card footer */
+  cardActions?: CardAction<T>[]
+  /** Custom mobile card renderer for app-like experience */
+  mobileCard?: (row: T, actions?: CardAction<T>[]) => React.ReactNode
 }
 
 export function DataTable<T>({
@@ -45,11 +57,13 @@ export function DataTable<T>({
   onPageChange,
   onRowClick,
   emptyMessage = 'No data found.',
+  cardActions,
+  mobileCard,
 }: DataTableProps<T>) {
   return (
     <div className="space-y-4">
       {/* Desktop table */}
-      <div className="hidden overflow-x-auto rounded-lg border sm:block">
+      <div className="bg-card hidden overflow-x-auto rounded-lg border sm:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -90,42 +104,64 @@ export function DataTable<T>({
       </div>
 
       {/* Mobile cards */}
-      <div className="flex flex-col gap-2 sm:hidden">
+      <div className="flex flex-col gap-3 sm:hidden">
         {data.length === 0 ? (
-          <p className="text-muted-foreground py-8 text-center text-sm">{emptyMessage}</p>
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="bg-muted/50 mb-3 rounded-full p-4">
+              <ChevronRight className="text-muted-foreground size-6" />
+            </div>
+            <p className="text-muted-foreground text-sm">{emptyMessage}</p>
+          </div>
+        ) : mobileCard ? (
+          data.map((row, i) => (
+            <div
+              key={i}
+              className={cn(
+                'transition-transform duration-150 active:scale-[0.98]',
+                onRowClick && 'cursor-pointer'
+              )}
+              onClick={() => onRowClick?.(row)}
+            >
+              {mobileCard(row, cardActions)}
+            </div>
+          ))
         ) : (
+          // Fallback to default card layout
           data.map((row, i) => {
-            const gridCols = columns.filter((c) => !c.fullRow)
-            const fullRowCols = columns.filter((c) => c.fullRow)
+            const gridCols = columns.filter((c) => !c.fullRow && !c.hideOnMobile)
+            const fullRowCols = columns.filter((c) => c.fullRow && !c.hideOnMobile)
             return (
-              <Card
+              <div
                 key={i}
-                className={
-                  onRowClick ? 'cursor-pointer transition-transform active:scale-[0.98]' : ''
-                }
+                className={cn(
+                  'bg-card ring-border/50 rounded-xl p-4 shadow-sm ring-1 transition-all duration-150',
+                  onRowClick && 'cursor-pointer active:scale-[0.98]'
+                )}
                 onClick={() => onRowClick?.(row)}
               >
-                <CardContent className="space-y-1.5 px-3 py-2">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    {gridCols.map((col) => (
-                      <div key={col.key} className="min-w-0">
-                        <p className="text-muted-foreground text-[10px] leading-tight">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  {gridCols.map((col) => (
+                    <div key={col.key} className="min-w-0">
+                      <p className="text-muted-foreground mb-0.5 text-[11px] font-medium uppercase tracking-wide">
+                        {col.header}
+                      </p>
+                      <div className="truncate text-sm">{col.render(row)}</div>
+                    </div>
+                  ))}
+                </div>
+                {fullRowCols.length > 0 && (
+                  <div className="mt-3 space-y-2 border-t pt-3">
+                    {fullRowCols.map((col) => (
+                      <div key={col.key}>
+                        <p className="text-muted-foreground mb-0.5 text-[11px] font-medium uppercase tracking-wide">
                           {col.header}
                         </p>
-                        <div className="truncate text-sm font-medium">{col.render(row)}</div>
+                        <div className="text-sm">{col.render(row)}</div>
                       </div>
                     ))}
                   </div>
-                  {fullRowCols.map((col) => (
-                    <div key={col.key} className="border-t pt-1.5">
-                      <p className="text-muted-foreground text-[10px] leading-tight">
-                        {col.header}
-                      </p>
-                      <div className="text-sm">{col.render(row)}</div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                )}
+              </div>
             )
           })
         )}

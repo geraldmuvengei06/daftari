@@ -28,17 +28,28 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
         </div>
       </div>
       {/* Mobile */}
-      <div className="flex flex-col gap-2 sm:hidden">
+      <div className="flex flex-col gap-3 sm:hidden">
         {Array.from({ length: rows }).map((_, r) => (
-          <div key={r} className="space-y-2 rounded-xl border p-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Bone className="h-2.5 w-12" />
-                <Bone className="h-4 w-28" />
+          <div key={r} className="overflow-hidden rounded-xl border">
+            <div className="flex items-center gap-3 p-4">
+              <Bone className="size-12 shrink-0 rounded-full" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Bone className="h-4 w-32" />
+                <Bone className="h-3 w-24" />
               </div>
-              <div className="space-y-1.5">
-                <Bone className="h-2.5 w-10" />
-                <Bone className="h-4 w-20" />
+              <div className="space-y-1.5 text-right">
+                <Bone className="ml-auto h-5 w-20" />
+                <Bone className="ml-auto h-3 w-12" />
+              </div>
+            </div>
+            <div className="flex border-t">
+              <div className="flex flex-1 items-center justify-center gap-2 py-2.5">
+                <Bone className="size-4" />
+                <Bone className="h-4 w-8" />
+              </div>
+              <div className="flex flex-1 items-center justify-center gap-2 border-l py-2.5">
+                <Bone className="size-4" />
+                <Bone className="h-4 w-12" />
               </div>
             </div>
           </div>

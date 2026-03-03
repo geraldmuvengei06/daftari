@@ -1,4 +1,5 @@
 {
   "phoneLogin": false,
-  "aiProvider": "openai"
+  "aiProvider": "openai",
+  "whatsappProvider": "twilio"
 }

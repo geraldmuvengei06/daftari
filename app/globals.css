@@ -124,3 +124,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Safe area support for mobile devices with notches/home indicators */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .h-safe-area-inset-bottom {
+    height: env(safe-area-inset-bottom);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

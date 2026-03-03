@@ -37,7 +37,7 @@ const styles = {
 export function StatCard({ label, value, icon: Icon, variant = 'muted' }: StatCardProps) {
   const s = styles[variant]
   return (
-    <div className={`relative flex items-center gap-4 overflow-hidden rounded-xl p-4 ${s.bg}`}>
+    <div className={`bg-card relative flex items-center gap-4 overflow-hidden rounded-xl p-4 ${s.bg}`}>
       <Icon className={`absolute -right-3 -bottom-3 size-24 ${s.watermark}`} />
       <div className={`flex size-10 items-center justify-center rounded-lg ${s.iconBg}`}>
         <Icon className={`size-5 ${s.iconColor}`} />
