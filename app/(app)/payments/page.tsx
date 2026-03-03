@@ -70,7 +70,8 @@ function PaymentMobileCard(
   const isCredit = row.type === 'credit'
 
   return (
-    <div className="bg-card ring-border/50 overflow-hidden rounded-xl shadow-sm ring-1">
+    <div className="bg-card overflow-hidden rounded-xl shadow-sm">
+      {/* Card Body */}
       <div className="flex items-center gap-3 p-4">
         <div
           className={`flex size-12 shrink-0 items-center justify-center rounded-full ${
@@ -89,7 +90,7 @@ function PaymentMobileCard(
               variant={isCredit ? 'default' : 'destructive'}
               className="text-[10px] uppercase"
             >
-              {row.type}
+              {isCredit ? 'Paid' : 'Paid Out'}
             </Badge>
           </div>
           <Link
@@ -108,51 +109,54 @@ function PaymentMobileCard(
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p
-            className={`text-xl font-bold ${isCredit ? 'text-primary' : 'text-destructive'}`}
-          >
-            {isCredit ? '+' : '-'}
-          </p>
           <p className={`text-lg font-bold ${isCredit ? 'text-primary' : 'text-destructive'}`}>
             KES {Number(row.amount).toLocaleString()}
           </p>
         </div>
       </div>
+
+      {/* Message with expandable text */}
       {row.raw_text && (
-        <div className="border-t px-4 py-2.5">
+        <div className="px-4 pb-3">
           <p className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wide">
             Message
           </p>
-          <p className="text-foreground line-clamp-2 text-sm">{row.raw_text}</p>
+          <div className="text-foreground text-sm">
+            <TruncatedText text={row.raw_text} maxLength={60} title="Message Content" />
+          </div>
         </div>
       )}
+
+      {/* Card Footer */}
       {actions && actions.length > 0 && (
-        <div className="flex border-t">
-          {actions.map((action, idx) => (
-            <button
+        <div className="flex items-center justify-end gap-2 border-t px-4 py-2">
+          {actions.filter(a => a.type === 'edit').map((action) => (
+            <Button
               key={action.type}
+              variant="secondary"
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation()
                 action.onClick(row)
               }}
-              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors active:bg-muted ${
-                action.type === 'delete'
-                  ? 'text-destructive hover:bg-destructive/10'
-                  : 'text-foreground hover:bg-muted'
-              } ${idx > 0 ? 'border-l' : ''}`}
             >
-              {action.type === 'edit' ? (
-                <>
-                  <Pencil className="size-4" />
-                  Edit
-                </>
-              ) : (
-                <>
-                  <Trash2 className="size-4" />
-                  Delete
-                </>
-              )}
-            </button>
+              <Pencil className="size-3.5" />
+              Edit
+            </Button>
+          ))}
+          {actions.filter(a => a.type === 'delete').map((action) => (
+            <Button
+              key={action.type}
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                action.onClick(row)
+              }}
+              aria-label="Delete"
+            >
+              <Trash2 className="text-muted-foreground size-4" />
+            </Button>
           ))}
         </div>
       )}
@@ -236,7 +240,9 @@ export default function PaymentsPage() {
       key: 'type',
       header: 'Type',
       render: (row) => (
-        <Badge variant={row.type === 'credit' ? 'default' : 'destructive'}>{row.type}</Badge>
+        <Badge variant={row.type === 'credit' ? 'default' : 'destructive'}>
+          {row.type === 'credit' ? 'Paid' : 'Paid Out'}
+        </Badge>
       ),
     },
     {

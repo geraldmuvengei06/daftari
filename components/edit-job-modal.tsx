@@ -159,21 +159,6 @@ export function EditJobModal({ job, open, onOpenChange, onSuccess }: EditJobModa
             />
             <FieldError message={errors.description} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-job-status">Status</Label>
-            <Select
-              value={form.status}
-              onValueChange={(v) => setForm({ ...form, status: v as 'open' | 'closed' })}
-            >
-              <SelectTrigger id="edit-job-status" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting ? 'Saving…' : 'Save Changes'}

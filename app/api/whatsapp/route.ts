@@ -22,23 +22,22 @@ async function resolveTenant(phone: string) {
 
 function getHelpMessage() {
   return (
-    '🎉 Karibu! Akaunti yako iko tayari.\n' +
-    'Hizi ndizo unazoweza kufanya:\n\n' +
-    '🛠 *Unda Job*\n' +
-    '  "Job Jane 1000 Print business cards"\n' +
-    '  "nimefanya kazi ya Jane bei 1000 business cards"\n\n' +
-    '👤 *Angalia Balance*\n' +
-    '  "Bal Jane" au "Jane ananidai ngapi"\n\n' +
-    '📊 *Ripoti*\n' +
-    '  "deni za leo" — madeni ya leo\n' +
-    '  "mapato ya wiki hii" — income ya wiki\n' +
-    '  "muhtasari" — overview kamili\n\n' +
-    '💳 *Rekodi Payment*\n' +
-    '  "Ameleta 500" au forward M-Pesa SMS\n\n' +
+    '🎉 Welcome! Your account is ready.\n' +
+    'Here is what you can do:\n\n' +
+    '🛠 *Create Job*\n' +
+    '  "Job Jane 1000 Print business cards"\n\n' +
+    '👤 *Check Balance*\n' +
+    '  "Bal Jane"\n\n' +
+    '📊 *Reports*\n' +
+    '  "debts today" — today\'s debts\n' +
+    '  "income this week" — weekly income\n' +
+    '  "summary" — full overview\n\n' +
+    '💳 *Record Payment*\n' +
+    '  "Received 500" or forward M-Pesa SMS\n\n' +
     '🔑 *Login Portal*\n' +
-    '  Tuma "Login" kupata link kwa email\n' +
-    '  Portal ina ripoti kamili na dashboard\n\n' +
-    '💡 Tuma message yoyote kuanza!'
+    '  Send "Login" to get link via email\n' +
+    '  Portal has full reports and dashboard\n\n' +
+    '💡 Send any message to start!'
   )
 }
 
@@ -61,18 +60,18 @@ async function handleRegistration(provider: WhatsAppProvider, phone: string, mes
 
     if (error || !newTenant) {
       console.error('Failed to create tenant:', error)
-      return '😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.'
+      return '😕 System error. Please try again later.'
     }
 
     const welcomeMsg = isGetStarted
-      ? '🎉 Karibu! Asante kwa kuchagua huduma yetu.\n\n'
-      : '👋 Karibu! Tunaona hii ni mara yako ya kwanza kutumia huduma hii.\n\n'
+      ? '🎉 Welcome! Thanks for choosing our service.\n\n'
+      : '👋 Welcome! We see this is your first time using this service.\n\n'
 
     return (
       welcomeMsg +
-      `📱 Nambari yako ${phone} imesajiliwa.\n\n` +
-      '📧 Tafadhali tuma jina lako/biashara yako na email yako.\n' +
-      'Mfano: Juma Electronics, juma@gmail.com'
+      `📱 Your number ${phone} has been registered.\n\n` +
+      '📧 Please send your name/business name and email.\n' +
+      'Example: Juma Electronics, juma@gmail.com'
     )
   }
 
@@ -87,7 +86,7 @@ async function handleRegistration(provider: WhatsAppProvider, phone: string, mes
   // registration_state === 'complete'
   // If user sends "Get Started", show them the help/welcome message
   if (isGetStarted) {
-    return '🎉 Karibu tena! Akaunti yako iko tayari.\n\n' + getHelpMessage().split('\n').slice(1).join('\n')
+    return '🎉 Welcome back! Your account is ready.\n\n' + getHelpMessage().split('\n').slice(1).join('\n')
   }
 
   // Otherwise continue to normal flow
@@ -102,8 +101,8 @@ async function handleAwaitingEmail(tenantId: string, messageText: string): Promi
   const emailMatch = text.match(emailRegex)
   if (!emailMatch) {
     return (
-      '📧 Sijapata email sahihi. Tafadhali tuma jina lako/biashara na email.\n' +
-      'Mfano: Juma Electronics, juma@gmail.com'
+      '📧 Valid email not found. Please send your name/business and email.\n' +
+      'Example: Juma Electronics, juma@gmail.com'
     )
   }
 
@@ -135,8 +134,8 @@ async function handleAwaitingEmail(tenantId: string, messageText: string): Promi
 
     if (existingTenant && existingTenant.id !== tenantId) {
       return (
-        '⚠️ Email hii tayari inatumika na akaunti nyingine.\n' +
-        'Tafadhali tuma email tofauti.'
+        '⚠️ This email is already used by another account.\n' +
+        'Please send a different email.'
       )
     }
 
@@ -150,18 +149,31 @@ async function handleAwaitingEmail(tenantId: string, messageText: string): Promi
       .eq('id', tenantId)
 
     if (existingUser.email_confirmed_at) {
-      return '✅ Email yako imethibitishwa tayari!\n\n' + getHelpMessage()
+      return '✅ Your email is already verified!\n\n' + getHelpMessage()
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${appUrl}/auth/callback?next=/customers`,
     })
 
+    if (inviteErr) {
+      console.error('[Registration] inviteUserByEmail failed:', inviteErr)
+      // Fallback to OTP
+      const { error: otpErr } = await supabaseAdmin.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: `${appUrl}/auth/callback?next=/customers` },
+      })
+      if (otpErr) {
+        console.error('[Registration] signInWithOtp fallback failed:', otpErr)
+        return '😕 Error sending verification email. Please try again later.'
+      }
+    }
+
     return (
-      `📧 Tumetuma barua ya uthibitisho kwa ${email}.\n\n` +
-      '📬 Fungua email yako ubonyeze link ya uthibitisho.\n' +
-      '⏳ Baada ya kuthibitisha, tuma message yoyote hapa kuendelea.'
+      `📧 We sent a verification email to ${email}.\n\n` +
+      '📬 Open your email and click the verification link.\n' +
+      '⏳ After verifying, send any message here to continue.'
     )
   }
 
@@ -174,8 +186,8 @@ async function handleAwaitingEmail(tenantId: string, messageText: string): Promi
   if (createError || !newUser?.user) {
     console.error('Failed to create auth user:', createError)
     return (
-      '😕 Kuna tatizo la kuunda akaunti. Tafadhali jaribu tena.\n' +
-      'Tuma jina na email yako tena.'
+      '😕 Error creating account. Please try again.\n' +
+      'Send your name and email again.'
     )
   }
 
@@ -200,10 +212,10 @@ async function handleAwaitingEmail(tenantId: string, messageText: string): Promi
   }
 
   return (
-    `✅ Asante${businessName !== 'My Business' ? ` ${businessName}` : ''}! Email yako ${email} imesajiliwa.\n\n` +
-    '📬 Tumetuma barua ya uthibitisho kwa email yako.\n' +
-    'Fungua email yako ubonyeze link ya uthibitisho.\n\n' +
-    '⏳ Baada ya kuthibitisha, tuma message yoyote hapa kuendelea.'
+    `✅ Thanks${businessName !== 'My Business' ? ` ${businessName}` : ''}! Your email ${email} has been registered.\n\n` +
+    '📬 We sent a verification email to your inbox.\n' +
+    'Open your email and click the verification link.\n\n' +
+    '⏳ After verifying, send any message here to continue.'
   )
 }
 
@@ -220,8 +232,8 @@ async function handleAwaitingVerification(tenantId: string, messageText: string)
       .update({ registration_state: 'awaiting_email' })
       .eq('id', tenantId)
     return (
-      '📧 Tafadhali tuma email yako ili tukamilishe usajili.\n' +
-      'Mfano: juma@gmail.com'
+      '📧 Please send your email to complete registration.\n' +
+      'Example: juma@gmail.com'
     )
   }
 
@@ -232,11 +244,11 @@ async function handleAwaitingVerification(tenantId: string, messageText: string)
       .from('tenants')
       .update({ registration_state: 'complete' })
       .eq('id', tenantId)
-    return '✅ Email yako imethibitishwa! Akaunti yako iko tayari.\n\n' + getHelpMessage()
+    return '✅ Your email is verified! Your account is ready.\n\n' + getHelpMessage()
   }
 
   const text = messageText.trim().toLowerCase()
-  if (text === 'resend' || text === 'tuma tena') {
+  if (text === 'resend') {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const email = tenant.owner_email
 
@@ -252,8 +264,8 @@ async function handleAwaitingVerification(tenantId: string, messageText: string)
     }
 
     return (
-      `📧 Tumetuma tena barua ya uthibitisho kwa ${email}.\n` +
-      'Fungua email yako ubonyeze link.'
+      `📧 We resent the verification email to ${email}.\n` +
+      'Open your email and click the link.'
     )
   }
 
@@ -261,10 +273,10 @@ async function handleAwaitingVerification(tenantId: string, messageText: string)
   const masked = local ? local.slice(0, 2) + '***@' + domain : tenant.owner_email
 
   return (
-    `⏳ Bado tunasubiri uthibitishe email yako (${masked}).\n\n` +
-    '📬 Fungua email yako ubonyeze link ya uthibitisho.\n' +
-    '🔄 Tuma "resend" au "tuma tena" kupata link mpya.\n\n' +
-    '💡 Huwezi kutumia huduma hii bila kuthibitisha email.'
+    `⏳ Still waiting for you to verify your email (${masked}).\n\n` +
+    '📬 Open your email and click the verification link.\n' +
+    '🔄 Send "resend" to get a new link.\n\n' +
+    '💡 You cannot use this service without verifying your email.'
   )
 }
 
@@ -350,7 +362,7 @@ async function handleJobCreation(
       .insert({ name: normalizedName, phone: normalizedName, tenant_id: tenantId })
       .select('id, name')
       .single()
-    if (error || !newCust) return '😕 Hatukuweza kuunda customer. Jaribu tena.'
+    if (error || !newCust) return '😕 Could not create customer. Try again.'
     customerId = newCust.id
     customerName = newCust.name
   }
@@ -365,10 +377,10 @@ async function handleJobCreation(
   }))
 
   const { error } = await supabaseAdmin.from('jobs').insert(jobRows)
-  if (error) return '😕 Tatizo la kuunda job card. Jaribu tena.'
+  if (error) return '😕 Error creating job card. Try again.'
 
   const grandTotal = parsed.items.reduce((s, i) => s + i.total, 0)
-  const lines = [`✨ Job Card${parsed.items.length > 1 ? 's' : ''} imeundwa!`, `👤 ${customerName}`]
+  const lines = [`✨ Job Card${parsed.items.length > 1 ? 's' : ''} created!`, `👤 ${customerName}`]
   for (const item of parsed.items) {
     if (item.quantity > 1) {
       lines.push(`  🔹 ${item.description} — ${item.quantity} × KES ${item.unit_price.toLocaleString()} = KES ${item.total.toLocaleString()}`)
@@ -379,7 +391,7 @@ async function handleJobCreation(
   if (parsed.items.length > 1) {
     lines.push(`💰 Total: KES ${grandTotal.toLocaleString()}`)
   }
-  lines.push('', '📲 Tuma M-Pesa message kupata payment ikirekodiwa automatically.')
+  lines.push('', '📲 Forward M-Pesa message to record payment automatically.')
   return lines.join('\n')
 }
 
@@ -400,7 +412,7 @@ async function handleBalanceQuery(tenantId: string, customerName: string): Promi
     .limit(1)
 
   if (!customers || customers.length === 0) {
-    return `🔍 Customer "${customerName}" hajapatikana.`
+    return `🔍 Customer "${customerName}" not found.`
   }
 
   const customer = customers[0]
@@ -430,14 +442,14 @@ async function handleBalanceQuery(tenantId: string, customerName: string): Promi
 
   if (!jobs || jobs.length === 0) {
     if (netPaid > 0) {
-      return `🎉 ${customer.name} hana open jobs.\n💰 Wallet: KES ${netPaid.toLocaleString()} (credit)`
+      return `🎉 ${customer.name} has no open jobs.\n💰 Wallet: KES ${netPaid.toLocaleString()} (credit)`
     }
-    return `🎉 ${customer.name} hana open jobs. Hakuna deni.`
+    return `🎉 ${customer.name} has no open jobs. No balance due.`
   }
 
   const totalQuote = jobs.reduce((s, j) => s + Number(j.total_quote), 0)
   let wallet = Math.max(0, netPaid)
-  const lines: string[] = [`📊 Balance ya ${customer.name}:\n`]
+  const lines: string[] = [`📊 Balance for ${customer.name}:\n`]
 
   for (const job of jobs) {
     const quote = Number(job.total_quote)
@@ -490,11 +502,11 @@ async function handleAIPayment(
       .select('id')
       .eq('mpesa_code', data.code)
       .maybeSingle()
-    if (dup) return 'ℹ️ Payment hii isha-recordiwa tayari.'
+    if (dup) return 'ℹ️ This payment has already been recorded.'
   }
 
   const customer = await resolveCustomer(tenantId, data.customer_name, data.customer_phone)
-  if (!customer) return '😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.'
+  if (!customer) return '😕 System error. Please try again later.'
 
   const { error: txError } = await supabaseAdmin.from('transactions').insert({
     mpesa_code: data.code,
@@ -509,15 +521,15 @@ async function handleAIPayment(
 
   if (txError) {
     console.error('Transaction insert failed:', txError)
-    return '😕 Kuna tatizo la save payment. Tafadhali jaribu tena baadaye.'
+    return '😕 Error saving payment. Please try again later.'
   }
 
-  const txLabel = data.transaction_type === 'credit' ? 'Umepokea' : 'Umetuma'
-  const direction = data.transaction_type === 'credit' ? 'kutoka kwa' : 'kwa'
+  const txLabel = data.transaction_type === 'credit' ? 'Received' : 'Sent'
+  const direction = data.transaction_type === 'credit' ? 'from' : 'to'
   return (
     `✅ ${txLabel} KES ${data.amount.toLocaleString()} ${direction} ${customer.name}.` +
     (data.code ? `\n📱 M-Pesa: ${data.code}` : '') +
-    `\n\n💡 Tuma "Bal ${customer.name}" kuona balance.`
+    `\n\n💡 Send "Bal ${customer.name}" to see balance.`
   )
 }
 
@@ -525,7 +537,7 @@ async function handleAIPayment(
 
 async function handleMpesaPayment(tenantId: string, messageText: string): Promise<string | null> {
   if (/Fuliza\s+M-PESA/i.test(messageText)) {
-    return 'ℹ️ Fuliza payments hazirekodiwa kwa sasa.'
+    return 'ℹ️ Fuliza payments are not recorded at this time.'
   }
 
   const isDebit = /sent\s+to/i.test(messageText)
@@ -569,8 +581,8 @@ async function handleMpesaPayment(tenantId: string, messageText: string): Promis
     resolveCustomer(tenantId, customer_name, customer_phone),
   ])
 
-  if (dupResult.data) return 'ℹ️ Payment hii isha-recordiwa tayari.'
-  if (!customer) return '😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.'
+  if (dupResult.data) return 'ℹ️ This payment has already been recorded.'
+  if (!customer) return '😕 System error. Please try again later.'
 
   const { error: txError } = await supabaseAdmin.from('transactions').insert({
     mpesa_code: code,
@@ -585,12 +597,12 @@ async function handleMpesaPayment(tenantId: string, messageText: string): Promis
 
   if (txError) {
     console.error('Transaction insert failed:', txError)
-    return '😕 Kuna tatizo la save payment. Tafadhali jaribu tena baadaye.'
+    return '😕 Error saving payment. Please try again later.'
   }
 
-  const txLabel = txType === 'credit' ? 'Umepokea' : 'Umetuma'
+  const txLabel = txType === 'credit' ? 'Received' : 'Sent'
   return (
-    `✅ ${txLabel} KES ${amount} ${txType === 'credit' ? 'kutoka kwa' : 'kwa'} ${customer.name}.\n\n💡 Tuma "Bal ${customer.name}" kuona balance.`
+    `✅ ${txLabel} KES ${amount} ${txType === 'credit' ? 'from' : 'to'} ${customer.name}.\n\n💡 Send "Bal ${customer.name}" to see balance.`
   )
 }
 
@@ -605,8 +617,8 @@ async function handleWhatsAppLogin(tenantId: string): Promise<string> {
 
   if (!tenant?.user_id) {
     return (
-      '🔒 Hakuna akaunti iliyounganishwa na nambari hii.\n' +
-      'Ingia kwanza kwa browser kupata akaunti yako iungane na WhatsApp.'
+      '🔒 No account linked to this number.\n' +
+      'Login via browser first to link your account with WhatsApp.'
     )
   }
 
@@ -616,7 +628,7 @@ async function handleWhatsAppLogin(tenantId: string): Promise<string> {
 
   const email = authUser?.user?.email
   if (authError || !email) {
-    return '🔒 Hakuna email iliyohusishwa na akaunti yako. Ingia kwa email kwanza.'
+    return '🔒 No email linked to your account. Login via email first.'
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -633,7 +645,7 @@ async function handleWhatsAppLogin(tenantId: string): Promise<string> {
 
     if (otpError) {
       console.error('[Login] OTP send failed:', otpError)
-      return '😕 Tatizo la kutuma login link. Jaribu tena.'
+      return '😕 Error sending login link. Try again.'
     }
   }
 
@@ -641,9 +653,9 @@ async function handleWhatsAppLogin(tenantId: string): Promise<string> {
   const masked = local.slice(0, 2) + '***@' + domain
 
   return (
-    `📧 Tumetuma login link kwa ${masked}.\n` +
-    'Fungua email yako ubonyeze link hiyo kuingia 🔓\n\n' +
-    '⏳ Link itaisha baada ya saa 1.'
+    `📧 We sent a login link to ${masked}.\n` +
+    'Open your email and click the link to login 🔓\n\n' +
+    '⏳ Link expires in 1 hour.'
   )
 }
 
@@ -654,19 +666,19 @@ function getDateRange(period: 'today' | 'week' | 'month' | 'all'): { from: strin
   switch (period) {
     case 'today': {
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      return { from: start.toISOString(), label: 'Leo' }
+      return { from: start.toISOString(), label: 'Today' }
     }
     case 'week': {
       const day = now.getDay()
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day)
-      return { from: start.toISOString(), label: 'Wiki hii' }
+      return { from: start.toISOString(), label: 'This week' }
     }
     case 'month': {
       const start = new Date(now.getFullYear(), now.getMonth(), 1)
-      return { from: start.toISOString(), label: 'Mwezi huu' }
+      return { from: start.toISOString(), label: 'This month' }
     }
     case 'all':
-      return { from: '2000-01-01T00:00:00Z', label: 'Jumla' }
+      return { from: '2000-01-01T00:00:00Z', label: 'Total' }
   }
 }
 
@@ -688,10 +700,10 @@ async function handleReport(
     if (period !== 'all') query = query.gte('created_at', from)
     const { data: jobs } = await query.limit(20)
 
-    if (!jobs || jobs.length === 0) return `🎉 Hakuna deni ${label.toLowerCase()}. Safi!`
+    if (!jobs || jobs.length === 0) return `🎉 No debts ${label.toLowerCase()}. All clear!`
 
     const total = jobs.reduce((s, j) => s + Number(j.total_quote), 0)
-    const lines = [`📊 Deni — ${label}:\n`]
+    const lines = [`📊 Debts — ${label}:\n`]
 
     for (const job of jobs) {
       const customer = (job.customers as unknown as { name: string })?.name ?? 'Unknown'
@@ -699,7 +711,7 @@ async function handleReport(
       lines.push(`     🔹 ${job.description}`)
     }
 
-    lines.push(`\n💰 Jumla: KES ${total.toLocaleString()}`)
+    lines.push(`\n💰 Total: KES ${total.toLocaleString()}`)
     lines.push(`🧾 Jobs: ${jobs.length}`)
     return lines.join('\n')
   }
@@ -716,17 +728,17 @@ async function handleReport(
     if (period !== 'all') query = query.gte('created_at', from)
     const { data: txns } = await query.limit(30)
 
-    if (!txns || txns.length === 0) return `📊 Hakuna mapato ${label.toLowerCase()}.`
+    if (!txns || txns.length === 0) return `📊 No income ${label.toLowerCase()}.`
 
     const total = txns.reduce((s, t) => s + Number(t.amount), 0)
-    const lines = [`📊 Mapato — ${label}:\n`]
+    const lines = [`📊 Income — ${label}:\n`]
 
     for (const txn of txns) {
       const customer = (txn.customers as unknown as { name: string })?.name ?? 'Unknown'
       lines.push(`  💵 KES ${Number(txn.amount).toLocaleString()} — ${customer}`)
     }
 
-    lines.push(`\n💰 Jumla: KES ${total.toLocaleString()}`)
+    lines.push(`\n💰 Total: KES ${total.toLocaleString()}`)
     lines.push(`🧾 Transactions: ${txns.length}`)
     return lines.join('\n')
   }
@@ -750,11 +762,11 @@ async function handleReport(
   const totalExpense = (expenseResult.data ?? []).reduce((s, t) => s + Number(t.amount), 0)
 
   return (
-    `📊 Muhtasari — ${label}:\n\n` +
+    `📊 Summary — ${label}:\n\n` +
     `🧾 Open Jobs: ${openJobs}\n` +
-    `⏳ Deni: KES ${totalOwed.toLocaleString()}\n` +
-    `💵 Mapato: KES ${totalIncome.toLocaleString()}\n` +
-    `💸 Matumizi: KES ${totalExpense.toLocaleString()}\n` +
+    `⏳ Owed: KES ${totalOwed.toLocaleString()}\n` +
+    `💵 Income: KES ${totalIncome.toLocaleString()}\n` +
+    `💸 Expenses: KES ${totalExpense.toLocaleString()}\n` +
     `💰 Net: KES ${(totalIncome - totalExpense).toLocaleString()}`
   )
 }
@@ -762,22 +774,21 @@ async function handleReport(
 // ─── Unknown Intent Response ───
 
 const UNKNOWN_RESPONSE =
-  '👋 Hujambo! Sijui message hii.\n' +
-  'Hizi ndizo unazoweza kufanya:\n\n' +
-  '🛠 *Unda Job*\n' +
-  '  "Job Jane 1000 Print business cards"\n' +
-  '  "nimefanya kazi ya Jane bei 1000 business cards"\n\n' +
-  '👤 *Angalia Balance*\n' +
-  '  "Bal Jane" au "Jane ananidai ngapi"\n\n' +
-  '📊 *Ripoti*\n' +
-  '  "deni za leo" — madeni ya leo\n' +
-  '  "mapato ya wiki hii" — income ya wiki\n' +
-  '  "muhtasari" — overview kamili\n\n' +
-  '💳 *Rekodi Payment*\n' +
-  '  "Ameleta 500" au forward M-Pesa SMS\n\n' +
+  '👋 Hi! I don\'t understand this message.\n' +
+  'Here is what you can do:\n\n' +
+  '🛠 *Create Job*\n' +
+  '  "Job Jane 1000 Print business cards"\n\n' +
+  '👤 *Check Balance*\n' +
+  '  "Bal Jane"\n\n' +
+  '📊 *Reports*\n' +
+  '  "debts today" — today\'s debts\n' +
+  '  "income this week" — weekly income\n' +
+  '  "summary" — full overview\n\n' +
+  '💳 *Record Payment*\n' +
+  '  "Received 500" or forward M-Pesa SMS\n\n' +
   '🔑 *Login Portal*\n' +
-  '  Tuma "Login" kupata link kwa email\n' +
-  '  Portal ina ripoti kamili na dashboard'
+  '  Send "Login" to get link via email\n' +
+  '  Portal has full reports and dashboard'
 
 // ─── Webhook Verification (GET) — Cloud API only ───
 
@@ -797,7 +808,7 @@ export async function POST(request: NextRequest) {
   try {
     const inbound = await provider.parseInbound(request)
     if (!inbound) {
-      return provider.buildResponse('😕 Message haikueleweka. Tafadhali tuma tena.')
+      return provider.buildResponse('😕 Message not understood. Please try again.')
     }
 
     const { phone, text: messageText } = inbound
@@ -815,7 +826,7 @@ export async function POST(request: NextRequest) {
 
     // At this point, tenant is fully registered
     const tenant = await resolveTenant(phone)
-    if (!tenant) return reply('😕 Kuna tatizo la system. Tafadhali jaribu tena baadaye.')
+    if (!tenant) return reply('😕 System error. Please try again later.')
     const tenantId = tenant.id
 
     // 1. AI-powered intent parsing — all messages go through AI
@@ -840,7 +851,7 @@ export async function POST(request: NextRequest) {
       }
       const balanceName = parseBalanceQuery(messageText)
       if (balanceName) return reply(await handleBalanceQuery(tenantId, balanceName))
-      return reply('🤔 Sijui message hii. Jaribu tena.')
+      return reply('🤔 I don\'t understand this message. Try again.')
     }
 
     // 2. Route based on AI-parsed intent
@@ -873,6 +884,6 @@ export async function POST(request: NextRequest) {
     return reply(responseMsg)
   } catch (error) {
     console.error('Unexpected error:', error)
-    return provider.buildResponse('😕 Kuna tatizo. Tafadhali jaribu tena baadaye.')
+    return provider.buildResponse('😕 Something went wrong. Please try again later.')
   }
 }

@@ -28,7 +28,7 @@ function CustomerMobileCard(
   const hasActivity = row.total_job_quotes > 0 || row.total_paid > 0
 
   return (
-    <div className="bg-card ring-border/50 overflow-hidden rounded-xl shadow-sm ring-1">
+    <div className="bg-card overflow-hidden rounded-xl shadow-sm">
       <div className="flex items-center gap-3 p-4">
         <div className="bg-primary/10 text-primary flex size-12 shrink-0 items-center justify-center rounded-full">
           <User className="size-5" />
@@ -55,7 +55,7 @@ function CustomerMobileCard(
               <p className="text-base font-bold text-green-600">
                 KES {Math.abs(row.balance).toLocaleString()}
               </p>
-              <p className="text-xs text-green-600/70">credit</p>
+              <p className="text-xs text-green-600/70">overpaid</p>
             </>
           ) : (
             <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
@@ -66,32 +66,20 @@ function CustomerMobileCard(
         <ChevronRight className="text-muted-foreground/50 size-5 shrink-0" />
       </div>
       {actions && actions.length > 0 && (
-        <div className="bg-muted/30 flex border-t">
-          {actions.map((action, idx) => (
-            <button
+        <div className="flex items-center justify-end gap-2 border-t px-4 py-2">
+          {actions.filter(a => a.type === 'edit').map((action) => (
+            <Button
               key={action.type}
+              variant="secondary"
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation()
                 action.onClick(row)
               }}
-              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors active:bg-muted ${
-                action.type === 'delete'
-                  ? 'text-destructive hover:bg-destructive/10'
-                  : 'text-foreground hover:bg-muted'
-              } ${idx > 0 ? 'border-l' : ''}`}
             >
-              {action.type === 'edit' ? (
-                <>
-                  <Pencil className="size-4" />
-                  Edit
-                </>
-              ) : (
-                <>
-                  <Trash2 className="size-4" />
-                  Delete
-                </>
-              )}
-            </button>
+              <Pencil className="size-3.5" />
+              Edit
+            </Button>
           ))}
         </div>
       )}
@@ -179,7 +167,7 @@ export default function CustomersPage() {
         if (row.balance < 0) {
           return (
             <span className="text-green-600">
-              Credit KES {Math.abs(row.balance).toLocaleString()}
+              Overpaid KES {Math.abs(row.balance).toLocaleString()}
             </span>
           )
         }
@@ -278,7 +266,6 @@ export default function CustomersPage() {
           onRowClick={(row) => router.push(`/customers/${row.id}`)}
           cardActions={[
             { type: 'edit', onClick: (row) => setEditingCustomer(row) },
-            { type: 'delete', onClick: (row) => setDeletingCustomer(row) },
           ]}
           mobileCard={(row, actions) => CustomerMobileCard(row, actions)}
         />

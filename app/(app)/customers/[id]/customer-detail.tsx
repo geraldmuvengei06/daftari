@@ -81,7 +81,7 @@ function TransactionMobileCard(row: Transaction, actions?: CardAction<Transactio
   const isCredit = row.type === 'credit'
 
   return (
-    <div className="bg-card ring-border/50 overflow-hidden rounded-xl shadow-sm ring-1">
+    <div className="bg-card overflow-hidden rounded-xl shadow-sm">
       <div className="flex items-center gap-3 p-4">
         {/* Transaction type icon */}
         <div
@@ -99,7 +99,7 @@ function TransactionMobileCard(row: Transaction, actions?: CardAction<Transactio
         {/* Info */}
         <div className="min-w-0 flex-1">
           <Badge variant={isCredit ? 'default' : 'destructive'} className="mb-1 text-[10px] uppercase">
-            {row.type}
+            {isCredit ? 'Paid' : 'Paid Out'}
           </Badge>
           <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
             <Calendar className="size-3" />
@@ -110,47 +110,51 @@ function TransactionMobileCard(row: Transaction, actions?: CardAction<Transactio
         {/* Amount */}
         <div className="shrink-0 text-right">
           <p className={`text-lg font-bold ${isCredit ? 'text-primary' : 'text-destructive'}`}>
-            {isCredit ? '+' : '-'} KES {Number(row.amount).toLocaleString()}
+            KES {Number(row.amount).toLocaleString()}
           </p>
         </div>
       </div>
 
       {row.raw_text && (
-        <div className="border-t px-4 py-2.5">
+        <div className="px-4 pb-3">
           <p className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wide">
             Message
           </p>
-          <p className="text-foreground line-clamp-2 text-sm">{row.raw_text}</p>
+          <div className="text-foreground text-sm">
+            <TruncatedText text={row.raw_text} maxLength={60} title="Message Content" />
+          </div>
         </div>
       )}
 
       {actions && actions.length > 0 && (
-        <div className="flex border-t">
-          {actions.map((action, idx) => (
-            <button
+        <div className="flex items-center justify-end gap-2 border-t px-4 py-2">
+          {actions.filter(a => a.type === 'edit').map((action) => (
+            <Button
               key={action.type}
+              variant="secondary"
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation()
                 action.onClick(row)
               }}
-              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors active:bg-muted ${
-                action.type === 'delete'
-                  ? 'text-destructive hover:bg-destructive/10'
-                  : 'text-foreground hover:bg-muted'
-              } ${idx > 0 ? 'border-l' : ''}`}
             >
-              {action.type === 'edit' ? (
-                <>
-                  <Pencil className="size-4" />
-                  Edit
-                </>
-              ) : (
-                <>
-                  <Trash2 className="size-4" />
-                  Delete
-                </>
-              )}
-            </button>
+              <Pencil className="size-3.5" />
+              Edit
+            </Button>
+          ))}
+          {actions.filter(a => a.type === 'delete').map((action) => (
+            <Button
+              key={action.type}
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                action.onClick(row)
+              }}
+              aria-label="Delete"
+            >
+              <Trash2 className="text-muted-foreground size-4" />
+            </Button>
           ))}
         </div>
       )}
@@ -214,7 +218,9 @@ export function CustomerDetail({ id, initialData }: { id: string; initialData: P
       key: 'type',
       header: 'Type',
       render: (row) => (
-        <Badge variant={row.type === 'credit' ? 'default' : 'destructive'}>{row.type}</Badge>
+        <Badge variant={row.type === 'credit' ? 'default' : 'destructive'}>
+          {row.type === 'credit' ? 'Paid' : 'Paid Out'}
+        </Badge>
       ),
     },
     {
@@ -333,7 +339,7 @@ export function CustomerDetail({ id, initialData }: { id: string; initialData: P
         />
         <StatCard
           label={
-            totals.balance > 0 ? 'Balance Due' : totals.balance < 0 ? 'Credit Balance' : 'Balance'
+            totals.balance > 0 ? 'Balance Due' : totals.balance < 0 ? 'Overpaid' : 'Balance'
           }
           value={
             totals.balance === 0 && totals.totalJobQuotes === 0
@@ -387,85 +393,84 @@ export function CustomerDetail({ id, initialData }: { id: string; initialData: P
                       ? Math.min(100, Math.round((job.total_paid / Number(job.total_quote)) * 100))
                       : 0
                   const isComplete = pct >= 100
+                  const balance = job.balance
                   return (
                     <div
                       key={job.id}
-                      className="bg-card ring-border/50 overflow-hidden rounded-xl shadow-sm ring-1"
+                      className="bg-card overflow-hidden rounded-xl shadow-sm"
                     >
-                      {/* Header */}
-                      <div className="flex items-start gap-3 p-4 pb-3">
-                        <div
-                          className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
-                            job.status === 'open'
-                              ? 'bg-primary/10 text-primary'
-                              : 'bg-muted text-muted-foreground'
-                          }`}
-                        >
-                          <ClipboardList className="size-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="mb-1 flex items-center gap-2">
-                            <Badge
-                              variant={job.status === 'open' ? 'default' : 'secondary'}
-                              className="text-[10px] uppercase"
-                            >
-                              {job.status}
-                            </Badge>
-                          </div>
-                          <p className="text-foreground line-clamp-2 text-sm font-medium leading-snug">
+                      {/* Card Body */}
+                      <div className="space-y-3 p-4">
+                        {/* Job Description Header */}
+                        <div>
+                          <p className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wide">
+                            Job Description
+                          </p>
+                          <p className="text-foreground text-sm font-medium leading-snug">
                             {job.description}
                           </p>
                         </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-foreground text-lg font-bold">
-                            KES {Number(job.total_quote).toLocaleString()}
-                          </p>
-                          <p className="text-muted-foreground text-[11px]">quote</p>
-                        </div>
-                      </div>
 
-                      {/* Progress */}
-                      <div className="bg-muted/30 px-4 py-3">
-                        <div className="mb-2 flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Payment Progress</span>
-                          <span
-                            className={isComplete ? 'font-medium text-green-600' : 'text-foreground'}
-                          >
-                            KES {job.total_paid.toLocaleString()} /{' '}
-                            {Number(job.total_quote).toLocaleString()}
+                        {/* Financial Breakdown */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+                              Quote
+                            </p>
+                            <p className="text-foreground text-sm font-semibold">
+                              KES {Number(job.total_quote).toLocaleString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+                              Paid
+                            </p>
+                            <p className="text-sm font-semibold text-green-600">
+                              KES {job.total_paid.toLocaleString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+                              Balance
+                            </p>
+                            <p className={`text-sm font-semibold ${balance > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                              KES {balance.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="flex items-center gap-2">
+                          <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
+                            <div
+                              className={`h-full rounded-full transition-all ${isComplete ? 'bg-green-500' : 'bg-primary'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-medium ${isComplete ? 'text-green-600' : 'text-muted-foreground'}`}>
+                            {pct}%
                           </span>
                         </div>
-                        <div className="bg-muted h-2.5 overflow-hidden rounded-full">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isComplete ? 'bg-green-500' : 'bg-primary'
-                            }`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        {job.balance > 0 && (
-                          <p className="text-destructive mt-2 text-xs font-medium">
-                            Balance: KES {job.balance.toLocaleString()}
-                          </p>
-                        )}
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex border-t">
-                        <button
+                      {/* Card Footer */}
+                      <div className="flex items-center justify-end gap-2 border-t px-4 py-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => setEditingJob(job)}
-                          className="text-foreground hover:bg-muted flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors active:bg-muted"
                         >
-                          <Pencil className="size-4" />
+                          <Pencil className="size-3.5" />
                           Edit
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => setDeletingJob(job)}
-                          className="text-destructive hover:bg-destructive/10 flex flex-1 items-center justify-center gap-2 border-l py-2.5 text-sm font-medium transition-colors active:bg-muted"
+                          aria-label="Delete"
                         >
-                          <Trash2 className="size-4" />
-                          Delete
-                        </button>
+                          <Trash2 className="text-muted-foreground size-4" />
+                        </Button>
                       </div>
                     </div>
                   )
