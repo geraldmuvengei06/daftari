@@ -9,7 +9,6 @@ import { EditJobModal } from '@/components/edit-job-modal'
 import { DeleteConfirmModal } from '@/components/delete-confirm-modal'
 import { SearchInput } from '@/components/search-input'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,40 +52,23 @@ function JobMobileCard(row: JobWithProgress, actions?: CardAction<JobWithProgres
       ? Math.min(100, Math.round((row.total_paid / Number(row.total_quote)) * 100))
       : 0
   const isComplete = pct >= 100
+  const balance = row.balance
 
   return (
-    <div className="bg-card ring-border/50 overflow-hidden rounded-xl shadow-sm ring-1">
-      <div className="flex items-start gap-3 p-4 pb-3">
-        <div
-          className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
-            row.status === 'open' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-          }`}
-        >
-          <ClipboardList className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2">
-            <Badge
-              variant={row.status === 'open' ? 'default' : 'secondary'}
-              className="text-[10px] uppercase"
-            >
-              {row.status}
-            </Badge>
-          </div>
-          <p className="text-foreground line-clamp-2 text-sm font-medium leading-snug">
+    <div className="bg-card overflow-hidden rounded-xl shadow-sm">
+      {/* Card Body */}
+      <div className="space-y-3 p-4">
+        {/* Job Description Header */}
+        <div>
+          <p className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wide">
+            Job Description
+          </p>
+          <p className="text-foreground text-sm font-medium leading-snug">
             {row.description}
           </p>
         </div>
-        <div className="shrink-0 text-right">
-          <p className="text-foreground text-lg font-bold">
-            KES {Number(row.total_quote).toLocaleString()}
-          </p>
-          <p className="text-muted-foreground text-[11px]">quote</p>
-        </div>
-      </div>
-      
-      {/* Customer link + Progress inline */}
-      <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5">
+
+        {/* Customer Link */}
         <Link
           href={`/customers/${row.customer_id}`}
           onClick={(e) => e.stopPropagation()}
@@ -97,10 +79,38 @@ function JobMobileCard(row: JobWithProgress, actions?: CardAction<JobWithProgres
           </div>
           <span className="text-primary text-sm font-medium">{row.customers.name}</span>
         </Link>
-        
-        {/* Compact progress */}
+
+        {/* Financial Breakdown */}
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+              Quote
+            </p>
+            <p className="text-foreground text-sm font-semibold">
+              KES {Number(row.total_quote).toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+              Paid
+            </p>
+            <p className="text-sm font-semibold text-green-600">
+              KES {row.total_paid.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+              Balance
+            </p>
+            <p className={`text-sm font-semibold ${balance > 0 ? 'text-destructive' : 'text-green-600'}`}>
+              KES {balance.toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        {/* Progress Bar */}
         <div className="flex items-center gap-2">
-          <div className="bg-muted h-1.5 w-16 overflow-hidden rounded-full">
+          <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
             <div
               className={`h-full rounded-full transition-all ${isComplete ? 'bg-green-500' : 'bg-primary'}`}
               style={{ width: `${pct}%` }}
@@ -112,42 +122,36 @@ function JobMobileCard(row: JobWithProgress, actions?: CardAction<JobWithProgres
         </div>
       </div>
 
-      {/* Balance if any */}
-      {row.balance > 0 && (
-        <div className="bg-destructive/5 border-t px-4 py-2">
-          <p className="text-destructive text-xs font-medium">
-            Balance: KES {row.balance.toLocaleString()}
-          </p>
-        </div>
-      )}
-
+      {/* Card Footer */}
       {actions && actions.length > 0 && (
-        <div className="flex border-t">
-          {actions.map((action, idx) => (
-            <button
+        <div className="flex items-center justify-end gap-2 border-t px-4 py-2">
+          {actions.filter(a => a.type === 'edit').map((action) => (
+            <Button
               key={action.type}
+              variant="secondary"
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation()
                 action.onClick(row)
               }}
-              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors active:bg-muted ${
-                action.type === 'delete'
-                  ? 'text-destructive hover:bg-destructive/10'
-                  : 'text-foreground hover:bg-muted'
-              } ${idx > 0 ? 'border-l' : ''}`}
             >
-              {action.type === 'edit' ? (
-                <>
-                  <Pencil className="size-4" />
-                  Edit
-                </>
-              ) : (
-                <>
-                  <Trash2 className="size-4" />
-                  Delete
-                </>
-              )}
-            </button>
+              <Pencil className="size-3.5" />
+              Edit
+            </Button>
+          ))}
+          {actions.filter(a => a.type === 'delete').map((action) => (
+            <Button
+              key={action.type}
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                action.onClick(row)
+              }}
+              aria-label="Delete"
+            >
+              <Trash2 className="text-muted-foreground size-4" />
+            </Button>
           ))}
         </div>
       )}
@@ -242,13 +246,7 @@ export default function JobsPage() {
         </span>
       ),
     },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (row) => (
-        <Badge variant={row.status === 'open' ? 'default' : 'secondary'}>{row.status}</Badge>
-      ),
-    },
+
     {
       key: 'actions',
       header: '',

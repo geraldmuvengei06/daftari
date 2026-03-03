@@ -186,8 +186,8 @@ export function RecordPaymentModal({ trigger, customerId, onSuccess }: RecordPay
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="credit">Credit (received)</SelectItem>
-                <SelectItem value="debit">Debit (paid out)</SelectItem>
+                <SelectItem value="credit">Paid (received)</SelectItem>
+                <SelectItem value="debit">Paid Out (sent)</SelectItem>
               </SelectContent>
             </Select>
           </div>
