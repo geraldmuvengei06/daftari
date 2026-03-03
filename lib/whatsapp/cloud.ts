@@ -3,6 +3,12 @@ import type { WhatsAppProvider, InboundMessage } from './types'
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0'
 
+function getCredentials() {
+  const token = process.env.WHATSAPP_TOKEN
+  const phoneId = process.env.WHATSAPP_PHONE_ID
+  return { token, phoneId }
+}
+
 export const cloudProvider: WhatsAppProvider = {
   async parseInbound(request) {
     const body = await request.json()
@@ -26,9 +32,57 @@ export const cloudProvider: WhatsAppProvider = {
     return { phone, text, messageId: msg.id }
   },
 
+  async markAsRead(messageId) {
+    const { token, phoneId } = getCredentials()
+    if (!token || !phoneId) return
+
+    try {
+      await fetch(`${GRAPH_API}/${phoneId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          status: 'read',
+          message_id: messageId,
+        }),
+      })
+    } catch (err) {
+      console.error('[Cloud API] Mark as read failed:', err)
+    }
+  },
+
+  async sendProcessingIndicator(to) {
+    const { token, phoneId } = getCredentials()
+    if (!token || !phoneId) return
+
+    try {
+      await fetch(`${GRAPH_API}/${phoneId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to,
+          type: 'reaction',
+          reaction: {
+            message_id: '', // Will be set by caller if needed
+            emoji: '⏳',
+          },
+        }),
+      })
+    } catch {
+      // Reaction might fail, fall back to text
+      await this.sendReply(to, '⏳ Processing...')
+    }
+  },
+
   async sendReply(to, message) {
-    const token = process.env.WHATSAPP_TOKEN
-    const phoneId = process.env.WHATSAPP_PHONE_ID
+    const { token, phoneId } = getCredentials()
 
     if (!token || !phoneId) {
       console.error('[Cloud API] Missing WHATSAPP_TOKEN or WHATSAPP_PHONE_ID')

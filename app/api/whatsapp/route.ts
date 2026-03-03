@@ -676,7 +676,12 @@ export async function POST(request: NextRequest) {
       return provider.buildResponse('😕 Message not understood. Please try again.')
     }
 
-    const { phone, text: messageText } = inbound
+    const { phone, text: messageText, messageId } = inbound
+
+    // Mark message as read immediately (Cloud API only)
+    if (messageId && provider.markAsRead) {
+      provider.markAsRead(messageId).catch(() => {})
+    }
 
     // Helper: send reply through the provider and return the HTTP response
     async function reply(message: string) {
@@ -707,6 +712,11 @@ export async function POST(request: NextRequest) {
     // New user — show welcome message
     if (welcomeMsg) {
       return reply(welcomeMsg)
+    }
+
+    // Send processing indicator for AI parsing (Cloud API only)
+    if (provider.sendProcessingIndicator) {
+      provider.sendProcessingIndicator(phone).catch(() => {})
     }
 
     // 1. AI-powered intent parsing — all messages go through AI
