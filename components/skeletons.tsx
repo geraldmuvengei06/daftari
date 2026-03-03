@@ -8,7 +8,7 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
   return (
     <div className="space-y-4">
       {/* Desktop */}
-      <div className="hidden overflow-hidden rounded-lg border sm:block">
+      <div className="bg-card hidden overflow-hidden rounded-lg border sm:block">
         <div className="bg-muted/40 flex gap-6 border-b px-4 py-3">
           {Array.from({ length: cols }).map((_, i) => (
             <Bone key={i} className="h-4 w-24" />
@@ -30,7 +30,7 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
       {/* Mobile */}
       <div className="flex flex-col gap-3 sm:hidden">
         {Array.from({ length: rows }).map((_, r) => (
-          <div key={r} className="overflow-hidden rounded-xl border">
+          <div key={r} className="bg-card overflow-hidden rounded-xl border">
             <div className="flex items-center gap-3 p-4">
               <Bone className="size-12 shrink-0 rounded-full" />
               <div className="min-w-0 flex-1 space-y-2">
@@ -65,7 +65,7 @@ export function StatCardSkeleton({ count = 2 }: { count?: number }) {
       {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
-          className="bg-muted/40 relative flex items-center gap-4 overflow-hidden rounded-xl p-4"
+          className="bg-card relative flex items-center gap-4 overflow-hidden rounded-xl p-4"
         >
           <Bone className="size-10 rounded-lg" />
           <div className="space-y-2">
@@ -80,7 +80,7 @@ export function StatCardSkeleton({ count = 2 }: { count?: number }) {
 
 export function ProfileCardSkeleton() {
   return (
-    <div className="rounded-xl border p-6">
+    <div className="bg-card rounded-xl border p-6">
       <div className="flex items-center gap-4">
         <Bone className="size-12 rounded-full" />
         <div className="space-y-2">
@@ -130,7 +130,7 @@ export function FeatureRequestListSkeleton() {
   return (
     <div className="space-y-3">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="space-y-2 rounded-xl border p-4">
+        <div key={i} className="bg-card space-y-2 rounded-xl border p-4">
           <div className="flex items-center justify-between">
             <Bone className="h-4 w-48" />
             <Bone className="h-5 w-16 rounded-full" />

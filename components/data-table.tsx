@@ -68,7 +68,13 @@ export function DataTable<T>({
           <TableHeader>
             <TableRow>
               {columns.map((col) => (
-                <TableHead key={col.key} className={col.className}>
+                <TableHead
+                  key={col.key}
+                  className={cn(
+                    col.className,
+                    col.key === 'actions' && 'bg-card sticky right-0'
+                  )}
+                >
                   {col.header}
                 </TableHead>
               ))}
@@ -92,7 +98,13 @@ export function DataTable<T>({
                   onClick={() => onRowClick?.(row)}
                 >
                   {columns.map((col) => (
-                    <TableCell key={col.key} className={col.className}>
+                    <TableCell
+                      key={col.key}
+                      className={cn(
+                        col.className,
+                        col.key === 'actions' && 'bg-card sticky right-0'
+                      )}
+                    >
                       {col.render(row)}
                     </TableCell>
                   ))}

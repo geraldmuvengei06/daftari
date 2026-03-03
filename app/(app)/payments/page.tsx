@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PageHeader } from '@/components/page-header'
-import { DataTable, type Column } from '@/components/data-table'
+import { DataTable, type Column, type CardAction } from '@/components/data-table'
 import { RecordPaymentModal } from '@/components/record-payment-modal'
 import { EditPaymentModal } from '@/components/edit-payment-modal'
 import { DeleteConfirmModal } from '@/components/delete-confirm-modal'
@@ -21,7 +21,16 @@ import { getTransactions, deleteTransaction } from '@/lib/actions'
 import type { TransactionWithCustomer, Transaction } from '@/lib/types'
 import { useRealtimeInserts } from '@/lib/use-realtime'
 import { TableSkeleton } from '@/components/skeletons'
-import { CreditCard, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import {
+  CreditCard,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  ArrowDownLeft,
+  ArrowUpRight,
+  User,
+  Calendar,
+} from 'lucide-react'
 
 const PER_PAGE = 20
 
@@ -42,6 +51,113 @@ function formatDateTime(iso: string): string {
     minute: '2-digit',
     hour12: true,
   })
+}
+
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-KE', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+function PaymentMobileCard(
+  row: TransactionWithCustomer,
+  actions?: CardAction<TransactionWithCustomer>[]
+) {
+  const isCredit = row.type === 'credit'
+
+  return (
+    <div className="bg-card ring-border/50 overflow-hidden rounded-xl shadow-sm ring-1">
+      <div className="flex items-center gap-3 p-4">
+        <div
+          className={`flex size-12 shrink-0 items-center justify-center rounded-full ${
+            isCredit ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'
+          }`}
+        >
+          {isCredit ? (
+            <ArrowDownLeft className="size-5" strokeWidth={2.5} />
+          ) : (
+            <ArrowUpRight className="size-5" strokeWidth={2.5} />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2">
+            <Badge
+              variant={isCredit ? 'default' : 'destructive'}
+              className="text-[10px] uppercase"
+            >
+              {row.type}
+            </Badge>
+          </div>
+          <Link
+            href={`/customers/${row.customer_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 hover:underline"
+          >
+            <User className="text-muted-foreground size-3.5" />
+            <span className="text-primary truncate text-sm font-medium">
+              {row.customers.name}
+            </span>
+          </Link>
+          <div className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-xs">
+            <Calendar className="size-3" />
+            <span>{formatShortDate(row.transaction_date)}</span>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <p
+            className={`text-xl font-bold ${isCredit ? 'text-primary' : 'text-destructive'}`}
+          >
+            {isCredit ? '+' : '-'}
+          </p>
+          <p className={`text-lg font-bold ${isCredit ? 'text-primary' : 'text-destructive'}`}>
+            KES {Number(row.amount).toLocaleString()}
+          </p>
+        </div>
+      </div>
+      {row.raw_text && (
+        <div className="border-t px-4 py-2.5">
+          <p className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wide">
+            Message
+          </p>
+          <p className="text-foreground line-clamp-2 text-sm">{row.raw_text}</p>
+        </div>
+      )}
+      {actions && actions.length > 0 && (
+        <div className="flex border-t">
+          {actions.map((action, idx) => (
+            <button
+              key={action.type}
+              onClick={(e) => {
+                e.stopPropagation()
+                action.onClick(row)
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors active:bg-muted ${
+                action.type === 'delete'
+                  ? 'text-destructive hover:bg-destructive/10'
+                  : 'text-foreground hover:bg-muted'
+              } ${idx > 0 ? 'border-l' : ''}`}
+            >
+              {action.type === 'edit' ? (
+                <>
+                  <Pencil className="size-4" />
+                  Edit
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-4" />
+                  Delete
+                </>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function PaymentsPage() {
@@ -230,6 +346,7 @@ export default function PaymentsPage() {
             { type: 'edit', onClick: (row) => setEditingTransaction(row) },
             { type: 'delete', onClick: (row) => setDeletingTransaction(row) },
           ]}
+          mobileCard={(row, actions) => PaymentMobileCard(row, actions)}
         />
       )}
 
