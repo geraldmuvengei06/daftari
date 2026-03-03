@@ -79,71 +79,101 @@ function getProvider(): AIProvider {
 
 // ─── Shared System Prompt ───
 
-const SYSTEM_PROMPT = `Act as a specialized financial assistant for Kenyan solopreneurs. You will receive a text message from a WhatsApp chat. Your goal is to return a clean JSON object.
+const SYSTEM_PROMPT = `You are a financial message parser for a Kenyan solopreneur's business tool. The user (business owner) sends you a WhatsApp message. Return a JSON object classifying the intent.
+
+CRITICAL CONTEXT: The user is a business owner. Messages are ALWAYS from their perspective:
+- When a customer pays them, that is INCOMING money → transaction_type: "credit"
+- When the business owner pays out to someone, that is OUTGOING money → transaction_type: "debit"
+- DEFAULT ASSUMPTION: Most informal payment messages describe money the business owner RECEIVED (credit). Only classify as "debit" if the message EXPLICITLY says the business owner sent/gave/paid out money.
 
 Rules:
-1. M-Pesa SMS: If the text is an M-Pesa confirmation (e.g., "QK78RT... Confirmed. Ksh500.00 received from JOHN DOE..."), extract:
+
+1. M-Pesa SMS: If the text looks like a forwarded M-Pesa confirmation (contains transaction codes like "QK78RT4X5M", "Confirmed", "Ksh"), extract:
    - type: "PAYMENT"
    - data.amount (number, no commas)
-   - data.code (the M-Pesa transaction code, e.g. "QK78RT4X5M")
+   - data.code (the M-Pesa transaction code)
    - data.customer_name (title-cased)
-   - data.customer_phone (if present in the SMS, otherwise null)
-   - data.transaction_type: "credit" if money was received, "debit" if money was sent
-   - data.transaction_date: ISO 8601 string if a date/time is present, otherwise null
-   - Fuliza M-PESA messages should return type "UNKNOWN".
+   - data.customer_phone (if present, otherwise null)
+   - data.transaction_type: "credit" if "received from", "debit" if "sent to"
+   - data.transaction_date: ISO 8601 string if date/time present, otherwise null
+   - Fuliza M-PESA messages → type "UNKNOWN"
 
-2. Informal Payments: If the user describes receiving or sending money informally (e.g., "Ameleta 500", "Nimepewa 200 na Juma leo", "Jane amelipa 1000"), extract:
+2. Informal Payments: If the user describes a payment informally, extract:
    - type: "PAYMENT"
    - data.amount, data.customer_name, data.code: null, data.customer_phone: null
-   - data.transaction_type: "credit" if receiving, "debit" if sending
+   - data.transaction_type: see SWAHILI PAYMENT VOCABULARY below
    - data.transaction_date: null
 
-3. Job Creation: If the text describes a new task or job, which may contain one or more line items. Examples:
-   - "Job Jane 1000 Print business cards" (single item)
-   - "Job Kamau: business card design @ 1000, printing 100 cards at 10 each 1000, 20 fliers at 20 each total 400" (multiple items)
-   - "nimefanya kazi ya Jane bei 1000 business cards" (single item, Swahili)
+   SWAHILI PAYMENT VOCABULARY (this is critical — get this right):
+   These ALL mean the customer PAID the business owner → "credit":
+   - "amelipa" / "amelipa" / "alilipa" = has paid / paid
+   - "ameleta" / "ameleta" = has brought (money)
+   - "amenilipa" = has paid me
+   - "nimepokea" = I have received
+   - "nimepewa" = I have been given
+   - "paid" / "has paid" / "received" / "got"
+   - "analipa" = is paying
+   - "amekuja na" = has come with (money)
+   - "<Name> <amount>" with no verb (e.g. "John 500") = customer paid → "credit"
+
+   These mean the business owner PAID OUT → "debit":
+   - "nimelipa" = I have paid (someone)
+   - "nimetoa" = I have given out
+   - "nimempa" = I have given them
+   - "nimetuma" = I have sent
+   - "I paid" / "I sent" / "I gave"
+   - "refund" / "nimerudisha" = I returned money
+
+3. Job Creation: If the text describes work done or a new task/order for a customer.
+   IMPORTANT: "Job" can be a person's name (e.g. "Job Ochieng"). Do NOT assume "Job" at the start means job creation. Look for these signals of job creation:
+   - Describes a service or product being provided (printing, design, repair, etc.)
+   - Contains pricing with item descriptions (e.g. "100 cards at 10 each")
+   - Uses words like "kazi" (work), "order", "printing", "design", etc.
+   - Has the pattern: customer name + service description + price
+
+   If the word "Job" appears as a person's name followed by a service description, treat it as a JOB with "Job" as the customer_name.
+
    Extract:
    - type: "JOB"
-   - data.customer_name (title-cased)
-   - data.items: array of { description (string), quantity (number, default 1), unit_price (number), total (number) }
+   - data.customer_name (title-cased — this is the CLIENT's name, not the service)
+   - data.items: array of { description, quantity (default 1), unit_price, total }
    - data.total_price: sum of all item totals
-   Each distinct service/product is a separate item. If "at X each" or "@ X" is given, use that as unit_price and calculate total = quantity * unit_price. If only a lump sum is given, quantity=1 and unit_price=total.
+   
+   Parsing items:
+   - "100 cards at 10 each" → quantity: 100, unit_price: 10, total: 1000
+   - "at 10/-" or "@ 10" means unit_price = 10
+   - If only a lump sum, quantity=1, unit_price=total
+   - "brought 100 business cards for printing at 10/- each" → the client brought items TO BE printed. The customer is whoever is named. description: "business cards for printing", quantity: 100, unit_price: 10, total: 1000
 
-4. Queries: If the user asks a question about a specific customer (e.g., "What is Jane's balance?", "jane ananidai ngapi", "Bal Jane"), extract:
+4. Queries: If the user asks about a specific customer's balance/debt:
    - type: "QUERY"
    - data.target_name (title-cased)
    - data.intent: "BALANCE"
 
-5. Reports: If the user asks for a business report or summary (not about a specific customer), extract:
+5. Reports: If the user asks for a business report (not about a specific customer):
    - type: "REPORT"
-   - data.report: one of "unpaid" (outstanding debts/deni), "income" (money received/mapato), "summary" (general overview/muhtasari)
-   - data.period: one of "today" (leo), "week" (wiki hii), "month" (mwezi huu), "all" (zote/all time)
-   Examples:
-   - "deni za leo" → report: "unpaid", period: "today"
-   - "mapato ya wiki hii" → report: "income", period: "week"
-   - "unpaid bills this month" → report: "unpaid", period: "month"
-   - "how much have I made today" → report: "income", period: "today"
-   - "muhtasari" or "summary" → report: "summary", period: "all"
-   - "report" → report: "summary", period: "today"
+   - data.report: "unpaid" | "income" | "summary"
+   - data.period: "today" | "week" | "month" | "all"
+   Examples: "deni za leo" → unpaid/today, "mapato ya wiki hii" → income/week
 
-6. Login: If the user wants to log in (e.g., "Login", "niingie", "sign in"), extract:
-   - type: "LOGIN"
-   - data: {}
+6. Login: "Login", "niingie", "sign in" →
+   - type: "LOGIN", data: {}
 
-7. Unknown: If the message doesn't match any intent, return:
-   - type: "UNKNOWN"
-   - data: {}
+7. Unknown: If nothing matches → type: "UNKNOWN", data: {}
 
-Language: Support English, Swahili, and Sheng (Kenyan slang). Examples:
-- "Ameleta 500" = someone brought/paid 500 (PAYMENT, credit)
-- "nimefanya kazi ya Jane bei 1000 business cards" = job for Jane (JOB)
-- "jane ananidai ngapi" = how much does Jane owe (QUERY, BALANCE)
-- "bob" or "KES" = Kenyan Shillings
+DISAMBIGUATION RULES (apply in order):
+- If the message contains an M-Pesa transaction code → always PAYMENT
+- If the message describes a service/product with pricing details (quantities, unit prices, descriptions of work) → JOB
+- If the message mentions someone paying or bringing money without service details → PAYMENT
+- If the message asks a question about a person → QUERY
+- "Job" followed by a service description = JOB intent where "Job" is the customer name
+- "Job" followed by just an amount and no service = ambiguous, prefer PAYMENT if payment verbs present
 
-Always include a "raw_summary" field: a short human-readable summary of what you understood.
+Language: Support English, Swahili, and Sheng. "bob" or "KES" = Kenyan Shillings.
 
-Output format:
-{ "type": "PAYMENT|JOB|QUERY|REPORT|LOGIN|UNKNOWN", "data": { ...extracted fields... }, "raw_summary": "Short human-readable summary" }`
+Always include "raw_summary": a short human-readable summary of what you understood.
+
+Output: { "type": "PAYMENT|JOB|QUERY|REPORT|LOGIN|UNKNOWN", "data": { ... }, "raw_summary": "..." }`
 
 // ─── Provider: Gemini ───
 
@@ -265,13 +295,51 @@ function validateResponse(parsed: Record<string, unknown>): ParsedIntent {
   return { type: 'UNKNOWN', data: {}, raw_summary: summary }
 }
 
+// ─── Post-validation: credit/debit heuristic safety net ───
+
+// Patterns that strongly indicate the CUSTOMER paid the business owner (credit)
+const CREDIT_PATTERNS = [
+  /amelipa/i, /alilipa/i, /ameleta/i, /amenilipa/i, /analipa/i,
+  /nimepokea/i, /nimepewa/i, /amekuja\s+na/i,
+  /\bpaid\b/i, /\breceived\b/i, /\bgot\b/i,
+  /\bhas\s+paid\b/i, /\bbought\b/i, /\bbrought\b/i,
+]
+
+// Patterns that strongly indicate the business owner PAID OUT (debit)
+const DEBIT_PATTERNS = [
+  /nimelipa/i, /nimetoa/i, /nimempa/i, /nimetuma/i,
+  /\bI\s+paid\b/, /\bI\s+sent\b/, /\bI\s+gave\b/,
+  /\brefund/i, /nimerudisha/i,
+]
+
+function inferTransactionType(message: string): 'credit' | 'debit' | null {
+  const creditScore = CREDIT_PATTERNS.filter((p) => p.test(message)).length
+  const debitScore = DEBIT_PATTERNS.filter((p) => p.test(message)).length
+  if (creditScore > 0 && debitScore === 0) return 'credit'
+  if (debitScore > 0 && creditScore === 0) return 'debit'
+  return null // ambiguous — trust the AI
+}
+
 // ─── Main Entry Point ───
 
 export async function parseWithAI(message: string): Promise<ParsedIntent> {
   const provider = getProvider()
   const raw = provider === 'openai' ? await callOpenAI(message) : await callGemini(message)
   const parsed = JSON.parse(raw)
-  return validateResponse(parsed)
+  const result = validateResponse(parsed)
+
+  // Safety net: override credit/debit if heuristic strongly disagrees with AI
+  if (result.type === 'PAYMENT') {
+    const heuristic = inferTransactionType(message)
+    if (heuristic && heuristic !== result.data.transaction_type) {
+      console.warn(
+        `AI said "${result.data.transaction_type}" but heuristic says "${heuristic}" for: ${message.slice(0, 80)}`
+      )
+      result.data.transaction_type = heuristic
+    }
+  }
+
+  return result
 }
 
 // Keep backward compat alias

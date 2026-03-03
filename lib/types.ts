@@ -42,7 +42,7 @@ export interface JobWithProgress extends JobWithCustomer {
 export interface CustomerWithBalance extends Customer {
   total_paid: number
   total_job_quotes: number
-  balance: number // positive = owes you, negative = overpaid
+  balance: number // positive = balance due, negative = overpaid
 }
 
 export interface Transaction {
