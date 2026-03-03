@@ -1,36 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Daftari
 
-## Getting Started
+A WhatsApp-first business management tool for small businesses. Track jobs, customers, payments, and balances via WhatsApp messages.
 
-First, run the development server:
+## Features
+
+- **WhatsApp Bot** - Create jobs, record payments, check balances via text
+- **M-Pesa Integration** - Forward M-Pesa SMS to auto-record payments
+- **AI-Powered Parsing** - Natural language understanding for messages
+- **Web Dashboard** - Full reports and management portal
+- **Multi-tenant** - Each phone number gets isolated data
+
+## WhatsApp Commands
+
+| Command | Example | Description |
+|---------|---------|-------------|
+| Create Job | `Job Jane 1000 Print business cards` | Create a job for customer |
+| Check Balance | `Bal Jane` | View customer's balance |
+| Record Payment | Forward M-Pesa SMS | Auto-extracts payment details |
+| Reports | `debts today`, `income this week`, `summary` | View business reports |
+| Login | `login` | Get magic link to web portal |
+
+## User Flow
+
+1. User sends any message → account created instantly
+2. Bot responds with help menu, user can start working immediately
+3. When user wants web access → type "login" → provide email → receive magic link
+
+No email verification required to use the WhatsApp bot.
+
+## Tech Stack
+
+- **Framework**: Next.js 14 (App Router)
+- **Database**: Supabase (Postgres)
+- **Auth**: Supabase Auth (magic links)
+- **WhatsApp**: Meta Cloud API or Twilio
+- **AI**: Gemini or OpenAI for message parsing
+
+## Setup
+
+### 1. Clone and install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repo>
+cd daftari
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copy `.env.example` to `.env` and fill in:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
-## Learn More
+# WhatsApp (Cloud API)
+WHATSAPP_TOKEN=
+WHATSAPP_PHONE_ID=
+WHATSAPP_VERIFY_TOKEN=
 
-To learn more about Next.js, take a look at the following resources:
+# AI Provider
+GEMINI_API_KEY=
+# or
+OPENAI_API_KEY=
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 3. Database
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Run migrations:
 
-## Deploy on Vercel
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 4. Run
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm dev
+```
+
+## WhatsApp Webhook Setup
+
+1. Create a Meta Business App at [developers.facebook.com](https://developers.facebook.com)
+2. Add WhatsApp product
+3. Configure webhook URL: `https://your-domain.com/api/whatsapp`
+4. Set verify token to match `WHATSAPP_VERIFY_TOKEN`
+5. Subscribe to `messages` webhook field
+
+## Project Structure
+
+```
+app/
+  (app)/           # Authenticated routes (dashboard)
+  api/whatsapp/    # WhatsApp webhook handler
+  auth/            # Auth callback
+  login/           # Login page
+components/        # React components
+lib/
+  whatsapp/        # WhatsApp provider abstraction
+  ai-parser.ts     # AI message parsing
+  actions.ts       # Server actions
+supabase/
+  migrations/      # Database migrations
+```
+
+## License
+
+MIT

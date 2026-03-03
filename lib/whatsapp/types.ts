@@ -18,4 +18,8 @@ export interface WhatsAppProvider {
   buildResponse(message: string): Response
   /** Handle webhook verification (GET requests). */
   handleVerification?(request: Request): Response
+  /** Mark a message as read (blue ticks). Optional - not all providers support this. */
+  markAsRead?(messageId: string): Promise<void>
+  /** Send a processing indicator message. Optional. */
+  sendProcessingIndicator?(to: string): Promise<void>
 }
