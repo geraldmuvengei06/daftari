@@ -474,24 +474,33 @@ async function handleLoginEmail(tenantId: string, messageText: string): Promise<
     return sendLoginLink(tenantId, email)
   }
 
-  // Create new auth user
-  const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    email_confirm: false,
+  // Use inviteUserByEmail which creates user AND sends confirmation email
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  
+  const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${appUrl}/auth/callback?next=/customers`,
   })
 
-  if (createError || !newUser?.user) {
-    console.error('Failed to create auth user:', createError)
+  if (inviteError || !inviteData?.user) {
+    console.error('Failed to invite user:', inviteError)
     await supabaseAdmin.from('tenants').update({ login_state: null }).eq('id', tenantId)
     return { response: '😕 Error setting up account. Please try again.' }
   }
 
   await supabaseAdmin
     .from('tenants')
-    .update({ user_id: newUser.user.id, owner_email: email, login_state: null })
+    .update({ user_id: inviteData.user.id, owner_email: email, login_state: null })
     .eq('id', tenantId)
 
-  return sendLoginLink(tenantId, email)
+  const [local, domain] = email.split('@')
+  const masked = local.slice(0, 2) + '***@' + domain
+
+  return {
+    response:
+      `📧 We sent a login link to ${masked}.\n` +
+      'Open your email and click the link to login 🔓\n\n' +
+      '⏳ Link expires in 1 hour.',
+  }
 }
 
 async function sendLoginLink(tenantId: string, email: string): Promise<{ response: string }> {
