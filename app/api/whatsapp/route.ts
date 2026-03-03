@@ -42,27 +42,65 @@ function getHelpMessage(isNewUser = false) {
   )
 }
 
+// ─── Terms Acceptance Message ───
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://daftariai.vercel.app'
+
+function getTermsMessage() {
+  return (
+    '👋 Welcome to Daftari!\n\n' +
+    'Before we get started, please review our terms:\n\n' +
+    `📜 Terms of Service:\n${APP_URL}/terms-of-service\n\n` +
+    `🔒 Privacy Policy:\n${APP_URL}/privacy-policy\n\n` +
+    'By sending *"I Accept"* or *"Get Started"*, you agree to our Terms of Service and Privacy Policy.\n\n' +
+    '💡 Reply with *"I Accept"* to continue.'
+  )
+}
+
 // ─── Registration Flow ───
 
-async function handleRegistration(phone: string, messageText: string): Promise<{ tenantId: string; welcomeMsg: string | null }> {
+async function handleRegistration(phone: string, messageText: string): Promise<{ tenantId: string; welcomeMsg: string | null; needsTerms?: boolean }> {
   const tenant = await resolveTenant(phone)
   const isGetStarted = /^get\s*started$/i.test(messageText.trim())
+  const isAccept = /^i\s*accept$/i.test(messageText.trim())
 
   if (tenant) {
-    // Existing user — show welcome if they sent "Get Started"
+    // Check if terms have been accepted
+    const { data: tenantData } = await supabaseAdmin
+      .from('tenants')
+      .select('terms_accepted_at')
+      .eq('id', tenant.id)
+      .single()
+
+    // If terms not accepted and user is trying to use the service
+    if (!tenantData?.terms_accepted_at) {
+      if (isAccept || isGetStarted) {
+        // Accept terms and continue
+        await supabaseAdmin
+          .from('tenants')
+          .update({ terms_accepted_at: new Date().toISOString() })
+          .eq('id', tenant.id)
+        return { tenantId: tenant.id, welcomeMsg: getHelpMessage(true) }
+      }
+      // Show terms message
+      return { tenantId: tenant.id, welcomeMsg: getTermsMessage(), needsTerms: true }
+    }
+
+    // Existing user with terms accepted — show welcome if they sent "Get Started"
     if (isGetStarted) {
       return { tenantId: tenant.id, welcomeMsg: getHelpMessage() }
     }
     return { tenantId: tenant.id, welcomeMsg: null }
   }
 
-  // New user — create account immediately, ready to use
+  // New user — create account but require terms acceptance first
   const { data: newTenant, error } = await supabaseAdmin
     .from('tenants')
     .insert({
       owner_phone: phone,
       business_name: 'My Business',
       registration_state: 'complete',
+      // terms_accepted_at is null - will be set when they accept
     })
     .select('id')
     .single()
@@ -72,8 +110,8 @@ async function handleRegistration(phone: string, messageText: string): Promise<{
     return { tenantId: '', welcomeMsg: '😕 System error. Please try again later.' }
   }
 
-  // Return welcome message for new users
-  return { tenantId: newTenant.id, welcomeMsg: getHelpMessage(true) }
+  // Show terms message for new users
+  return { tenantId: newTenant.id, welcomeMsg: getTermsMessage(), needsTerms: true }
 }
 
 // ─── Customer Resolution ───
@@ -699,11 +737,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle registration — creates account if new, returns tenantId
-    const { tenantId, welcomeMsg } = await handleRegistration(phone, messageText)
+    const { tenantId, welcomeMsg, needsTerms } = await handleRegistration(phone, messageText)
     
     if (!tenantId) {
       // Error during registration
       return reply(welcomeMsg || '😕 System error. Please try again later.')
+    }
+
+    // If user needs to accept terms, don't process further
+    if (needsTerms && welcomeMsg) {
+      return reply(welcomeMsg)
     }
 
     // Check if user is in login flow (awaiting email)

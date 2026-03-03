@@ -87,7 +87,7 @@ export default function LoginPage() {
 
   if (handlingMagicLink) {
     return (
-      <div className="flex min-h-svh items-center justify-center px-4">
+      <div className="flex min-h-[calc(100svh-49px)] flex-col items-center justify-center px-4 py-8">
         <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
@@ -167,7 +167,7 @@ export default function LoginPage() {
 
   if (sent === 'phone') {
     return (
-      <div className="flex min-h-svh items-center justify-center px-4">
+      <div className="flex min-h-[calc(100svh-49px)] flex-col items-center justify-center px-4 py-8">
         <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
@@ -220,7 +220,7 @@ export default function LoginPage() {
 
   if (sent === 'email') {
     return (
-      <div className="flex min-h-svh items-center justify-center px-4">
+      <div className="flex min-h-svh flex-col items-center justify-center px-4 py-8">
         <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
@@ -253,7 +253,7 @@ export default function LoginPage() {
   // Email-only login (phone feature disabled)
   if (!features.phoneLogin) {
     return (
-      <div className="flex min-h-svh items-center justify-center px-4">
+      <div className="flex min-h-svh flex-col items-center justify-center px-4 py-8">
         <BackgroundPattern />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
@@ -327,7 +327,7 @@ export default function LoginPage() {
 
   // Phone + Email tabs (phone feature enabled)
   return (
-    <div className="flex min-h-svh items-center justify-center px-4">
+    <div className="flex min-h-svh flex-col items-center justify-center px-4 py-8">
       <BackgroundPattern />
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">

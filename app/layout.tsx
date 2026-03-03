@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono, Noto_Sans } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
+import { StickyFooter } from '@/components/legal-links'
 
 const notoSans = Noto_Sans({ variable: '--font-sans' })
 
@@ -35,7 +36,12 @@ export default function RootLayout({
         />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <div className="flex min-h-svh flex-col">
+            <main className="flex-1">{children}</main>
+            <StickyFooter />
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   )

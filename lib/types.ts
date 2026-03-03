@@ -5,6 +5,7 @@ export interface Tenant {
   owner_email: string
   business_name: string
   registration_state: 'awaiting_email' | 'awaiting_verification' | 'complete'
+  terms_accepted_at: string | null
   created_at: string
 }
 

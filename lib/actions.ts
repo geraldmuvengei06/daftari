@@ -638,6 +638,33 @@ export async function signOut() {
   await supabase.auth.signOut()
 }
 
+export async function deleteAccount() {
+  const user = await getUser()
+  const tenantId = await getTenantId()
+
+  // Soft delete: anonymize tenant data
+  const { error: tenantError } = await supabaseAdmin
+    .from('tenants')
+    .update({
+      owner_phone: `deleted_${tenantId}`,
+      owner_email: null,
+      business_name: 'Deleted Account',
+      registration_state: 'complete',
+      user_id: null,
+    })
+    .eq('id', tenantId)
+
+  if (tenantError) throw new Error('Failed to delete account data')
+
+  // Delete the auth user (this will also sign them out)
+  const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(user.id)
+  if (authError) throw new Error('Failed to delete authentication')
+
+  // Sign out the current session
+  const supabase = await createSupabaseServer()
+  await supabase.auth.signOut()
+}
+
 // ─── Realtime helpers ───
 
 export async function getCurrentTenantId() {

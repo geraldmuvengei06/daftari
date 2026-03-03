@@ -11,13 +11,15 @@ import { Button } from '@/components/ui/button'
 import { StatCard } from '@/components/stat-card'
 import { ProfileCardSkeleton, StatCardSkeleton } from '@/components/skeletons'
 import { EditTenantModal } from '@/components/edit-tenant-modal'
-import { getTenant, getProfileStats, getUserProfile, signOut } from '@/lib/actions'
+import { DeleteAccountModal } from '@/components/delete-account-modal'
+import { getTenant, getProfileStats, getUserProfile, signOut, deleteAccount } from '@/lib/actions'
 import type { Tenant } from '@/lib/types'
 import {
   TrendingUp,
   TrendingDown,
   Clock,
   LogOut,
+  Trash2,
   User,
   Users,
   Receipt,
@@ -73,6 +75,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [loggingOut, setLoggingOut] = useState(false)
   const [editingTenant, setEditingTenant] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -99,6 +102,11 @@ export default function ProfilePage() {
     } catch {
       setLoggingOut(false)
     }
+  }
+
+  const handleDeleteAccount = async () => {
+    await deleteAccount()
+    router.push('/login')
   }
 
   const initials = tenant?.business_name
@@ -215,15 +223,26 @@ export default function ProfilePage() {
 
       <Separator />
 
-      <Button
-        variant="destructive"
-        className="w-full sm:w-auto"
-        onClick={handleLogout}
-        disabled={loggingOut}
-      >
-        <LogOut />
-        {loggingOut ? 'Logging out…' : 'Logout'}
-      </Button>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Button
+          variant="outline"
+          className="w-full sm:w-auto"
+          onClick={handleLogout}
+          disabled={loggingOut}
+        >
+          <LogOut />
+          {loggingOut ? 'Logging out…' : 'Logout'}
+        </Button>
+
+        <Button
+          variant="destructive"
+          className="w-full sm:w-auto"
+          onClick={() => setDeletingAccount(true)}
+        >
+          <Trash2 />
+          Delete Account
+        </Button>
+      </div>
 
       {tenant && (
         <EditTenantModal
@@ -233,6 +252,12 @@ export default function ProfilePage() {
           onSuccess={fetchData}
         />
       )}
+
+      <DeleteAccountModal
+        open={deletingAccount}
+        onOpenChange={setDeletingAccount}
+        onConfirm={handleDeleteAccount}
+      />
     </div>
   )
 }
