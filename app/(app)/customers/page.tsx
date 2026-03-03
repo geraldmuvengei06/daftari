@@ -48,7 +48,7 @@ function CustomerMobileCard(
               <p className="text-destructive text-base font-bold">
                 KES {row.balance.toLocaleString()}
               </p>
-              <p className="text-destructive/70 text-xs">owes</p>
+              <p className="text-destructive/70 text-xs">balance</p>
             </>
           ) : row.balance < 0 ? (
             <>

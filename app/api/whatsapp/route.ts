@@ -298,7 +298,7 @@ async function handleBalanceQuery(tenantId: string, customerName: string): Promi
     )
   }
 
-  const owes = Math.max(0, totalQuote - netPaid)
+  const balance = Math.max(0, totalQuote - netPaid)
   const overpaid = Math.max(0, netPaid - totalQuote)
 
   lines.push(`\n🧾 Jobs Total: KES ${totalQuote.toLocaleString()}`)
@@ -310,7 +310,7 @@ async function handleBalanceQuery(tenantId: string, customerName: string): Promi
   if (overpaid > 0) {
     lines.push(`🎉 Credit: KES ${overpaid.toLocaleString()}`)
   } else {
-    lines.push(`⏳ Owes: KES ${owes.toLocaleString()}`)
+    lines.push(`⏳ Balance: KES ${balance.toLocaleString()}`)
   }
 
   return lines.join('\n')
@@ -670,14 +670,14 @@ async function handleReport(
   ])
 
   const openJobs = jobsResult.data?.length ?? 0
-  const totalOwed = (jobsResult.data ?? []).reduce((s, j) => s + Number(j.total_quote), 0)
+  const totalBalance = (jobsResult.data ?? []).reduce((s, j) => s + Number(j.total_quote), 0)
   const totalIncome = (incomeResult.data ?? []).reduce((s, t) => s + Number(t.amount), 0)
   const totalExpense = (expenseResult.data ?? []).reduce((s, t) => s + Number(t.amount), 0)
 
   return (
     `📊 Summary — ${label}:\n\n` +
     `🧾 Open Jobs: ${openJobs}\n` +
-    `⏳ Owed: KES ${totalOwed.toLocaleString()}\n` +
+    `⏳ Outstanding: KES ${totalBalance.toLocaleString()}\n` +
     `💵 Income: KES ${totalIncome.toLocaleString()}\n` +
     `💸 Expenses: KES ${totalExpense.toLocaleString()}\n` +
     `💰 Net: KES ${(totalIncome - totalExpense).toLocaleString()}`

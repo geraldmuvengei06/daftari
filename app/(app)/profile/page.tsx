@@ -35,7 +35,7 @@ interface Stats {
   totalTransactions: number
   totalCredits: number
   totalDebits: number
-  moneyOwed: number
+  outstandingBalance: number
 }
 
 interface UserProfileData {
@@ -212,8 +212,8 @@ export default function ProfilePage() {
               variant="destructive"
             />
             <StatCard
-              label="Money Owed"
-              value={`KES ${(stats?.moneyOwed ?? 0).toLocaleString()}`}
+              label="Outstanding Balance"
+              value={`KES ${(stats?.outstandingBalance ?? 0).toLocaleString()}`}
               icon={Clock}
               variant="muted"
             />

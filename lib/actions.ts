@@ -196,7 +196,7 @@ export async function getCustomers() {
     const totalPaid = paidMap[c.id] || 0
     const totalDebits = debitMap[c.id] || 0
     const totalQuotes = quotesMap[c.id] || 0
-    // Net payments = credits minus debits; balance = what they owe
+    // Net payments = credits minus debits; balance = outstanding amount
     return {
       ...c,
       total_paid: totalPaid,
@@ -355,7 +355,7 @@ export async function getCustomerTotals(customerId: string) {
     .filter((t) => t.type === 'debit')
     .reduce((sum, t) => sum + Number(t.amount), 0)
 
-  // Total owed from open jobs
+  // Total balance from open jobs
   const { data: openJobs } = await supabaseAdmin
     .from('jobs')
     .select('total_quote')
@@ -364,7 +364,7 @@ export async function getCustomerTotals(customerId: string) {
     .eq('status', 'open')
 
   const totalJobQuotes = (openJobs ?? []).reduce((s, j) => s + Number(j.total_quote), 0)
-  // Net payments = credits minus debits; balance = what they still owe
+  // Net payments = credits minus debits; balance = outstanding amount
   const balance = totalJobQuotes - (totalPaid - totalPaidOut)
 
   return { totalPaid, totalPaidOut, totalJobQuotes, balance }
@@ -584,14 +584,14 @@ export async function getProfileStats() {
     (sum: number, j: { total_quote: number }) => sum + Number(j.total_quote),
     0
   )
-  const moneyOwed = Math.max(0, totalJobQuotes - totalCredits)
+  const outstandingBalance = Math.max(0, totalJobQuotes - totalCredits)
 
   return {
     totalCustomers: customerCount ?? 0,
     totalTransactions: transactionCount ?? 0,
     totalCredits,
     totalDebits,
-    moneyOwed,
+    outstandingBalance,
   }
 }
 
