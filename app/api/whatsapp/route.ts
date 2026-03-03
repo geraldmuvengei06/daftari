@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { parseWithAI } from '@/lib/ai-parser'
-import { getWhatsAppProvider, type WhatsAppProvider } from '@/lib/whatsapp'
+import { getWhatsAppProvider } from '@/lib/whatsapp'
 
 // ─── Tenant Resolution ───
 
@@ -20,9 +20,12 @@ async function resolveTenant(phone: string) {
 
 // ─── Help Message ───
 
-function getHelpMessage() {
+function getHelpMessage(isNewUser = false) {
+  const intro = isNewUser
+    ? '🎉 Welcome! Your account is ready.\n'
+    : ''
   return (
-    '🎉 Welcome! Your account is ready.\n' +
+    intro +
     'Here is what you can do:\n\n' +
     '🛠 *Create Job*\n' +
     '  "Job Jane 1000 Print business cards"\n\n' +
@@ -35,249 +38,42 @@ function getHelpMessage() {
     '💳 *Record Payment*\n' +
     '  "Received 500" or forward M-Pesa SMS\n\n' +
     '🔑 *Login Portal*\n' +
-    '  Send "Login" to get link via email\n' +
-    '  Portal has full reports and dashboard\n\n' +
-    '💡 Send any message to start!'
+    '  Send "Login" to access web dashboard'
   )
 }
 
 // ─── Registration Flow ───
 
-async function handleRegistration(provider: WhatsAppProvider, phone: string, messageText: string) {
+async function handleRegistration(phone: string, messageText: string): Promise<{ tenantId: string; welcomeMsg: string | null }> {
   const tenant = await resolveTenant(phone)
   const isGetStarted = /^get\s*started$/i.test(messageText.trim())
 
-  if (!tenant) {
-    const { data: newTenant, error } = await supabaseAdmin
-      .from('tenants')
-      .insert({
-        owner_phone: phone,
-        business_name: 'My Business',
-        registration_state: 'awaiting_email',
-      })
-      .select('id')
-      .single()
-
-    if (error || !newTenant) {
-      console.error('Failed to create tenant:', error)
-      return '😕 System error. Please try again later.'
+  if (tenant) {
+    // Existing user — show welcome if they sent "Get Started"
+    if (isGetStarted) {
+      return { tenantId: tenant.id, welcomeMsg: getHelpMessage() }
     }
-
-    const welcomeMsg = isGetStarted
-      ? '🎉 Welcome! Thanks for choosing our service.\n\n'
-      : '👋 Welcome! We see this is your first time using this service.\n\n'
-
-    return (
-      welcomeMsg +
-      `📱 Your number ${phone} has been registered.\n\n` +
-      '📧 Please send your name/business name and email.\n' +
-      'Example: Juma Electronics, juma@gmail.com'
-    )
+    return { tenantId: tenant.id, welcomeMsg: null }
   }
 
-  if (tenant.registration_state === 'awaiting_email') {
-    return handleAwaitingEmail(tenant.id, messageText)
-  }
-
-  if (tenant.registration_state === 'awaiting_verification') {
-    return handleAwaitingVerification(tenant.id, messageText)
-  }
-
-  // registration_state === 'complete'
-  // If user sends "Get Started", show them the help/welcome message
-  if (isGetStarted) {
-    return '🎉 Welcome back! Your account is ready.\n\n' + getHelpMessage().split('\n').slice(1).join('\n')
-  }
-
-  // Otherwise continue to normal flow
-  return null
-}
-
-async function handleAwaitingEmail(tenantId: string, messageText: string): Promise<string> {
-  const text = messageText.trim()
-  const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/
-
-  // Try to extract email from the message
-  const emailMatch = text.match(emailRegex)
-  if (!emailMatch) {
-    return (
-      '📧 Valid email not found. Please send your name/business and email.\n' +
-      'Example: Juma Electronics, juma@gmail.com'
-    )
-  }
-
-  const email = emailMatch[0].toLowerCase()
-  
-  // Extract business name (everything before the email, cleaned up)
-  let businessName = text.replace(emailRegex, '').replace(/[,;:\-]+/g, ' ').trim()
-  if (!businessName || businessName.length < 2) {
-    businessName = 'My Business'
-  }
-
-  // Update business name
-  await supabaseAdmin
+  // New user — create account immediately, ready to use
+  const { data: newTenant, error } = await supabaseAdmin
     .from('tenants')
-    .update({ business_name: businessName })
-    .eq('id', tenantId)
-
-  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
-  const existingUser = existingUsers?.users?.find(
-    (u) => u.email?.toLowerCase() === email
-  )
-
-  if (existingUser) {
-    const { data: existingTenant } = await supabaseAdmin
-      .from('tenants')
-      .select('id')
-      .eq('user_id', existingUser.id)
-      .maybeSingle()
-
-    if (existingTenant && existingTenant.id !== tenantId) {
-      return (
-        '⚠️ This email is already used by another account.\n' +
-        'Please send a different email.'
-      )
-    }
-
-    await supabaseAdmin
-      .from('tenants')
-      .update({
-        user_id: existingUser.id,
-        owner_email: email,
-        registration_state: existingUser.email_confirmed_at ? 'complete' : 'awaiting_verification',
-      })
-      .eq('id', tenantId)
-
-    if (existingUser.email_confirmed_at) {
-      return '✅ Your email is already verified!\n\n' + getHelpMessage()
-    }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${appUrl}/auth/callback?next=/customers`,
+    .insert({
+      owner_phone: phone,
+      business_name: 'My Business',
+      registration_state: 'complete',
     })
-
-    if (inviteErr) {
-      console.error('[Registration] inviteUserByEmail failed:', inviteErr)
-      // Fallback to OTP
-      const { error: otpErr } = await supabaseAdmin.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${appUrl}/auth/callback?next=/customers` },
-      })
-      if (otpErr) {
-        console.error('[Registration] signInWithOtp fallback failed:', otpErr)
-        return '😕 Error sending verification email. Please try again later.'
-      }
-    }
-
-    return (
-      `📧 We sent a verification email to ${email}.\n\n` +
-      '📬 Open your email and click the verification link.\n' +
-      '⏳ After verifying, send any message here to continue.'
-    )
-  }
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    email_confirm: false,
-  })
-
-  if (createError || !newUser?.user) {
-    console.error('Failed to create auth user:', createError)
-    return (
-      '😕 Error creating account. Please try again.\n' +
-      'Send your name and email again.'
-    )
-  }
-
-  await supabaseAdmin
-    .from('tenants')
-    .update({
-      user_id: newUser.user.id,
-      owner_email: email,
-      registration_state: 'awaiting_verification',
-    })
-    .eq('id', tenantId)
-
-  const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${appUrl}/auth/callback?next=/customers`,
-  })
-
-  if (inviteError) {
-    await supabaseAdmin.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${appUrl}/auth/callback?next=/customers` },
-    })
-  }
-
-  return (
-    `✅ Thanks${businessName !== 'My Business' ? ` ${businessName}` : ''}! Your email ${email} has been registered.\n\n` +
-    '📬 We sent a verification email to your inbox.\n' +
-    'Open your email and click the verification link.\n\n' +
-    '⏳ After verifying, send any message here to continue.'
-  )
-}
-
-async function handleAwaitingVerification(tenantId: string, messageText: string): Promise<string> {
-  const { data: tenant } = await supabaseAdmin
-    .from('tenants')
-    .select('user_id, owner_email')
-    .eq('id', tenantId)
+    .select('id')
     .single()
 
-  if (!tenant?.user_id) {
-    await supabaseAdmin
-      .from('tenants')
-      .update({ registration_state: 'awaiting_email' })
-      .eq('id', tenantId)
-    return (
-      '📧 Please send your email to complete registration.\n' +
-      'Example: juma@gmail.com'
-    )
+  if (error || !newTenant) {
+    console.error('Failed to create tenant:', error)
+    return { tenantId: '', welcomeMsg: '😕 System error. Please try again later.' }
   }
 
-  const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(tenant.user_id)
-
-  if (authUser?.user?.email_confirmed_at) {
-    await supabaseAdmin
-      .from('tenants')
-      .update({ registration_state: 'complete' })
-      .eq('id', tenantId)
-    return '✅ Your email is verified! Your account is ready.\n\n' + getHelpMessage()
-  }
-
-  const text = messageText.trim().toLowerCase()
-  if (text === 'resend') {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const email = tenant.owner_email
-
-    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${appUrl}/auth/callback?next=/customers`,
-    })
-
-    if (error) {
-      await supabaseAdmin.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${appUrl}/auth/callback?next=/customers` },
-      })
-    }
-
-    return (
-      `📧 We resent the verification email to ${email}.\n` +
-      'Open your email and click the link.'
-    )
-  }
-
-  const [local, domain] = (tenant.owner_email || '').split('@')
-  const masked = local ? local.slice(0, 2) + '***@' + domain : tenant.owner_email
-
-  return (
-    `⏳ Still waiting for you to verify your email (${masked}).\n\n` +
-    '📬 Open your email and click the verification link.\n' +
-    '🔄 Send "resend" to get a new link.\n\n' +
-    '💡 You cannot use this service without verifying your email.'
-  )
+  // Return welcome message for new users
+  return { tenantId: newTenant.id, welcomeMsg: getHelpMessage(true) }
 }
 
 // ─── Customer Resolution ───
@@ -608,29 +404,97 @@ async function handleMpesaPayment(tenantId: string, messageText: string): Promis
 
 // ─── WhatsApp Login ───
 
-async function handleWhatsAppLogin(tenantId: string): Promise<string> {
+async function handleWhatsAppLogin(tenantId: string, messageText: string): Promise<{ response: string; needsEmail?: boolean }> {
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('user_id')
+    .select('user_id, owner_email, login_state')
     .eq('id', tenantId)
     .single()
 
-  if (!tenant?.user_id) {
-    return (
-      '🔒 No account linked to this number.\n' +
-      'Login via browser first to link your account with WhatsApp.'
-    )
+  // Check if user is in the middle of providing email for login
+  if (tenant?.login_state === 'awaiting_email') {
+    return handleLoginEmail(tenantId, messageText)
   }
 
-  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(
-    tenant.user_id
-  )
+  // No email set yet — ask for it
+  if (!tenant?.owner_email) {
+    await supabaseAdmin
+      .from('tenants')
+      .update({ login_state: 'awaiting_email' })
+      .eq('id', tenantId)
 
-  const email = authUser?.user?.email
-  if (authError || !email) {
-    return '🔒 No email linked to your account. Login via email first.'
+    return {
+      response: '📧 To access the web portal, please send your email address.\nExample: juma@gmail.com',
+      needsEmail: true,
+    }
   }
 
+  // Email exists — send magic link
+  return sendLoginLink(tenantId, tenant.owner_email)
+}
+
+async function handleLoginEmail(tenantId: string, messageText: string): Promise<{ response: string; needsEmail?: boolean }> {
+  const text = messageText.trim()
+  const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/
+  const emailMatch = text.match(emailRegex)
+
+  if (!emailMatch) {
+    return {
+      response: '📧 Please send a valid email address.\nExample: juma@gmail.com',
+      needsEmail: true,
+    }
+  }
+
+  const email = emailMatch[0].toLowerCase()
+
+  // Check if email is already used by another tenant
+  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+  const existingUser = existingUsers?.users?.find((u) => u.email?.toLowerCase() === email)
+
+  if (existingUser) {
+    const { data: existingTenant } = await supabaseAdmin
+      .from('tenants')
+      .select('id')
+      .eq('user_id', existingUser.id)
+      .maybeSingle()
+
+    if (existingTenant && existingTenant.id !== tenantId) {
+      return {
+        response: '⚠️ This email is already used by another account.\nPlease send a different email.',
+        needsEmail: true,
+      }
+    }
+
+    // Link existing user to this tenant
+    await supabaseAdmin
+      .from('tenants')
+      .update({ user_id: existingUser.id, owner_email: email, login_state: null })
+      .eq('id', tenantId)
+
+    return sendLoginLink(tenantId, email)
+  }
+
+  // Create new auth user
+  const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    email_confirm: false,
+  })
+
+  if (createError || !newUser?.user) {
+    console.error('Failed to create auth user:', createError)
+    await supabaseAdmin.from('tenants').update({ login_state: null }).eq('id', tenantId)
+    return { response: '😕 Error setting up account. Please try again.' }
+  }
+
+  await supabaseAdmin
+    .from('tenants')
+    .update({ user_id: newUser.user.id, owner_email: email, login_state: null })
+    .eq('id', tenantId)
+
+  return sendLoginLink(tenantId, email)
+}
+
+async function sendLoginLink(tenantId: string, email: string): Promise<{ response: string }> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
   const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
@@ -638,6 +502,7 @@ async function handleWhatsAppLogin(tenantId: string): Promise<string> {
   })
 
   if (error) {
+    console.error('[Login] inviteUserByEmail failed:', error)
     const { error: otpError } = await supabaseAdmin.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: `${appUrl}/auth/callback?next=/customers` },
@@ -645,18 +510,19 @@ async function handleWhatsAppLogin(tenantId: string): Promise<string> {
 
     if (otpError) {
       console.error('[Login] OTP send failed:', otpError)
-      return '😕 Error sending login link. Try again.'
+      return { response: '😕 Error sending login link. Try again.' }
     }
   }
 
   const [local, domain] = email.split('@')
   const masked = local.slice(0, 2) + '***@' + domain
 
-  return (
-    `📧 We sent a login link to ${masked}.\n` +
-    'Open your email and click the link to login 🔓\n\n' +
-    '⏳ Link expires in 1 hour.'
-  )
+  return {
+    response:
+      `📧 We sent a login link to ${masked}.\n` +
+      'Open your email and click the link to login 🔓\n\n' +
+      '⏳ Link expires in 1 hour.',
+  }
 }
 
 // ─── Reports ───
@@ -787,8 +653,7 @@ const UNKNOWN_RESPONSE =
   '💳 *Record Payment*\n' +
   '  "Received 500" or forward M-Pesa SMS\n\n' +
   '🔑 *Login Portal*\n' +
-  '  Send "Login" to get link via email\n' +
-  '  Portal has full reports and dashboard'
+  '  Send "Login" to access web dashboard'
 
 // ─── Webhook Verification (GET) — Cloud API only ───
 
@@ -815,19 +680,34 @@ export async function POST(request: NextRequest) {
 
     // Helper: send reply through the provider and return the HTTP response
     async function reply(message: string) {
-      // For Cloud API, we need to actively send the reply via API
       await provider.sendReply(phone, message)
       return provider.buildResponse(message)
     }
 
-    // Handle registration flow (new users + onboarding)
-    const registrationMsg = await handleRegistration(provider, phone, messageText)
-    if (registrationMsg) return reply(registrationMsg)
+    // Handle registration — creates account if new, returns tenantId
+    const { tenantId, welcomeMsg } = await handleRegistration(phone, messageText)
+    
+    if (!tenantId) {
+      // Error during registration
+      return reply(welcomeMsg || '😕 System error. Please try again later.')
+    }
 
-    // At this point, tenant is fully registered
-    const tenant = await resolveTenant(phone)
-    if (!tenant) return reply('😕 System error. Please try again later.')
-    const tenantId = tenant.id
+    // Check if user is in login flow (awaiting email)
+    const { data: tenantState } = await supabaseAdmin
+      .from('tenants')
+      .select('login_state')
+      .eq('id', tenantId)
+      .single()
+
+    if (tenantState?.login_state === 'awaiting_email') {
+      const loginResult = await handleWhatsAppLogin(tenantId, messageText)
+      return reply(loginResult.response)
+    }
+
+    // New user — show welcome message
+    if (welcomeMsg) {
+      return reply(welcomeMsg)
+    }
 
     // 1. AI-powered intent parsing — all messages go through AI
     let intent: Awaited<ReturnType<typeof parseWithAI>>
@@ -840,7 +720,10 @@ export async function POST(request: NextRequest) {
       // Fallback: try regex parsers when AI is unavailable
       const mpesaResult = await handleMpesaPayment(tenantId, messageText)
       if (mpesaResult) return reply(mpesaResult)
-      if (/^login$/i.test(messageText.trim())) return reply(await handleWhatsAppLogin(tenantId))
+      if (/^login$/i.test(messageText.trim())) {
+        const loginResult = await handleWhatsAppLogin(tenantId, messageText)
+        return reply(loginResult.response)
+      }
       const jobParsed = parseJobMessage(messageText)
       if (jobParsed) {
         const msg = await handleJobCreation(tenantId, {
@@ -873,9 +756,11 @@ export async function POST(request: NextRequest) {
       case 'REPORT':
         responseMsg = await handleReport(tenantId, intent.data.report, intent.data.period)
         break
-      case 'LOGIN':
-        responseMsg = await handleWhatsAppLogin(tenantId)
+      case 'LOGIN': {
+        const loginResult = await handleWhatsAppLogin(tenantId, messageText)
+        responseMsg = loginResult.response
         break
+      }
       case 'UNKNOWN':
       default:
         responseMsg = UNKNOWN_RESPONSE
