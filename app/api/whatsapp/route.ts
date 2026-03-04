@@ -116,9 +116,34 @@ async function handleRegistration(phone: string, messageText: string): Promise<{
 
 // ─── Customer Resolution ───
 
-async function resolveCustomer(tenantId: string, name: string, phone: string | null) {
+type ResolveResult =
+  | { status: 'matched'; id: string; name: string }
+  | { status: 'created'; id: string; name: string }
+  | { status: 'ambiguous'; candidate: { id: string; name: string }; incomingName: string }
+  | { status: 'error' }
+
+/**
+ * Check if two names are a fuzzy match (one is a prefix/substring of the other).
+ * Returns true when names partially overlap but aren't an exact ilike match.
+ * E.g. "Mercy" vs "Mercy Okoth" → true
+ */
+function isFuzzyNameMatch(existingName: string, incomingName: string): boolean {
+  const a = existingName.toLowerCase().trim()
+  const b = incomingName.toLowerCase().trim()
+  if (a === b) return false // exact match, not fuzzy
+  // Check if either name's first word matches the other's first word
+  // AND one is a substring/prefix of the other
+  const aFirst = a.split(/\s+/)[0]
+  const bFirst = b.split(/\s+/)[0]
+  if (aFirst !== bFirst) return false
+  // One name contains the other (e.g. "Mercy" in "Mercy Okoth")
+  return a.includes(b) || b.includes(a)
+}
+
+async function resolveCustomer(tenantId: string, name: string, phone: string | null): Promise<ResolveResult> {
   const normalizedName = name.replace(/\s+/g, ' ').trim()
 
+  // 1. Phone-based lookup (highest confidence)
   if (phone) {
     const { data: byPhone } = await supabaseAdmin
       .from('customers')
@@ -131,10 +156,11 @@ async function resolveCustomer(tenantId: string, name: string, phone: string | n
       if (byPhone.name === byPhone.id || byPhone.name === phone) {
         await supabaseAdmin.from('customers').update({ name: normalizedName }).eq('id', byPhone.id)
       }
-      return byPhone as { id: string; name: string }
+      return { status: 'matched', id: byPhone.id, name: byPhone.name }
     }
   }
 
+  // 2. Exact substring match (existing ilike logic)
   const { data: byName } = await supabaseAdmin
     .from('customers')
     .select('id, name, phone')
@@ -147,16 +173,216 @@ async function resolveCustomer(tenantId: string, name: string, phone: string | n
     if (phone && (existing.phone === existing.name || !existing.phone.match(/^\+?\d/))) {
       await supabaseAdmin.from('customers').update({ phone }).eq('id', existing.id)
     }
-    return { id: existing.id, name: existing.name }
+    return { status: 'matched', id: existing.id, name: existing.name }
   }
 
+  // 3. Fuzzy match — check if incoming name is a longer/shorter version of an existing customer
+  //    e.g. existing "Mercy" and incoming "Mercy Okoth", or vice versa
+  const firstWord = normalizedName.split(/\s+/)[0]
+  const { data: fuzzyMatches } = await supabaseAdmin
+    .from('customers')
+    .select('id, name')
+    .eq('tenant_id', tenantId)
+    .ilike('name', `${firstWord}%`)
+    .limit(5)
+
+  if (fuzzyMatches && fuzzyMatches.length > 0) {
+    const candidate = fuzzyMatches.find((c) => isFuzzyNameMatch(c.name, normalizedName))
+    if (candidate) {
+      return {
+        status: 'ambiguous',
+        candidate: { id: candidate.id, name: candidate.name },
+        incomingName: normalizedName,
+      }
+    }
+  }
+
+  // 4. No match at all — create new customer
   const { data, error } = await supabaseAdmin
     .from('customers')
     .insert({ phone: phone ?? normalizedName, name: normalizedName, tenant_id: tenantId })
     .select('id, name')
     .single()
-  if (error || !data) return null
-  return data as { id: string; name: string }
+  if (error || !data) return { status: 'error' }
+  return { status: 'created', id: data.id, name: data.name }
+}
+
+// ─── Pending Confirmation Helpers ───
+
+async function getPendingConfirmation(tenantId: string) {
+  // Clean up expired confirmations first
+  await supabaseAdmin
+    .from('pending_confirmations')
+    .delete()
+    .lt('expires_at', new Date().toISOString())
+
+  const { data } = await supabaseAdmin
+    .from('pending_confirmations')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+
+  return data as {
+    id: string
+    tenant_id: string
+    incoming_name: string
+    matched_customer_id: string
+    matched_customer_name: string
+    original_intent: Record<string, unknown>
+    raw_text: string | null
+    created_at: string
+  } | null
+}
+
+async function storePendingConfirmation(
+  tenantId: string,
+  incomingName: string,
+  matchedCustomerId: string,
+  matchedCustomerName: string,
+  originalIntent: Record<string, unknown>,
+  rawText: string
+) {
+  // Upsert — replace any existing pending confirmation for this tenant
+  await supabaseAdmin
+    .from('pending_confirmations')
+    .delete()
+    .eq('tenant_id', tenantId)
+
+  await supabaseAdmin
+    .from('pending_confirmations')
+    .insert({
+      tenant_id: tenantId,
+      incoming_name: incomingName,
+      matched_customer_id: matchedCustomerId,
+      matched_customer_name: matchedCustomerName,
+      original_intent: originalIntent,
+      raw_text: rawText,
+    })
+}
+
+async function deletePendingConfirmation(tenantId: string) {
+  await supabaseAdmin
+    .from('pending_confirmations')
+    .delete()
+    .eq('tenant_id', tenantId)
+}
+
+/**
+ * Pick the longer (more complete) name between two candidates.
+ * "Mercy" vs "Mercy Okoth" → "Mercy Okoth"
+ */
+function pickFullerName(a: string, b: string): string {
+  return a.length >= b.length ? a : b
+}
+
+async function handleConfirmationResponse(
+  tenantId: string,
+  confirmed: boolean,
+  pending: NonNullable<Awaited<ReturnType<typeof getPendingConfirmation>>>
+): Promise<string> {
+  await deletePendingConfirmation(tenantId)
+
+  const intent = pending.original_intent as unknown as import('@/lib/ai-parser').ParsedIntent
+  const rawText = pending.raw_text ?? ''
+
+  if (confirmed) {
+    // Update customer name to the fuller version
+    const fullerName = pickFullerName(pending.incoming_name, pending.matched_customer_name)
+    await supabaseAdmin
+      .from('customers')
+      .update({ name: fullerName })
+      .eq('id', pending.matched_customer_id)
+
+    // Replay the original intent with the matched customer
+    return replayIntent(tenantId, intent, pending.matched_customer_id, fullerName, rawText)
+  } else {
+    // Create a new customer with the incoming name
+    const { data: newCust, error } = await supabaseAdmin
+      .from('customers')
+      .insert({
+        name: pending.incoming_name,
+        phone: pending.incoming_name,
+        tenant_id: tenantId,
+      })
+      .select('id, name')
+      .single()
+
+    if (error || !newCust) return '😕 Could not create customer. Try again.'
+
+    return replayIntent(tenantId, intent, newCust.id, newCust.name, rawText)
+  }
+}
+
+async function replayIntent(
+  tenantId: string,
+  intent: import('@/lib/ai-parser').ParsedIntent,
+  customerId: string,
+  customerName: string,
+  rawText: string
+): Promise<string> {
+  switch (intent.type) {
+    case 'PAYMENT': {
+      const d = intent.data
+      if (d.code) {
+        const { data: dup } = await supabaseAdmin
+          .from('transactions')
+          .select('id')
+          .eq('mpesa_code', d.code)
+          .maybeSingle()
+        if (dup) return 'ℹ️ This payment has already been recorded.'
+      }
+
+      const { error: txError } = await supabaseAdmin.from('transactions').insert({
+        mpesa_code: d.code,
+        amount: d.amount,
+        type: d.transaction_type,
+        status: 'paid',
+        raw_text: rawText,
+        tenant_id: tenantId,
+        customer_id: customerId,
+        transaction_date: d.transaction_date,
+      })
+      if (txError) return '😕 Error saving payment. Please try again later.'
+
+      const txLabel = d.transaction_type === 'credit' ? 'Received' : 'Sent'
+      const direction = d.transaction_type === 'credit' ? 'from' : 'to'
+      return (
+        `✅ ${txLabel} KES ${d.amount.toLocaleString()} ${direction} ${customerName}.` +
+        (d.code ? `\n📱 M-Pesa: ${d.code}` : '') +
+        `\n\n💡 Send "Bal ${customerName}" to see balance.`
+      )
+    }
+    case 'JOB': {
+      const jobRows = intent.data.items.map((item) => ({
+        tenant_id: tenantId,
+        customer_id: customerId,
+        description: item.quantity > 1
+          ? `${item.description} (${item.quantity} × KES ${item.unit_price.toLocaleString()})`
+          : item.description,
+        total_quote: item.total,
+      }))
+
+      const { error } = await supabaseAdmin.from('jobs').insert(jobRows)
+      if (error) return '😕 Error creating job card. Try again.'
+
+      const grandTotal = intent.data.items.reduce((s, i) => s + i.total, 0)
+      const lines = [`✨ Job Card${intent.data.items.length > 1 ? 's' : ''} created!`, `👤 ${customerName}`]
+      for (const item of intent.data.items) {
+        if (item.quantity > 1) {
+          lines.push(`  🔹 ${item.description} — ${item.quantity} × KES ${item.unit_price.toLocaleString()} = KES ${item.total.toLocaleString()}`)
+        } else {
+          lines.push(`  🔹 ${item.description} — KES ${item.total.toLocaleString()}`)
+        }
+      }
+      if (intent.data.items.length > 1) {
+        lines.push(`💰 Total: KES ${grandTotal.toLocaleString()}`)
+      }
+      lines.push('', '📲 Forward M-Pesa message to record payment automatically.')
+      return lines.join('\n')
+    }
+    default:
+      return '😕 Could not process the original request. Please try again.'
+  }
 }
 
 // ─── Job Creation ───
@@ -173,33 +399,35 @@ function parseJobMessage(text: string) {
 
 async function handleJobCreation(
   tenantId: string,
-  parsed: { customerName: string; items: { description: string; quantity: number; unit_price: number; total: number }[] }
+  parsed: { customerName: string; items: { description: string; quantity: number; unit_price: number; total: number }[] },
+  rawText: string,
+  fullIntent: import('@/lib/ai-parser').ParsedIntent
 ): Promise<string> {
   const normalizedName = parsed.customerName.replace(/\s+/g, ' ').trim()
 
-  const { data: customers } = await supabaseAdmin
-    .from('customers')
-    .select('id, name')
-    .eq('tenant_id', tenantId)
-    .ilike('name', `%${normalizedName}%`)
-    .limit(1)
+  const result = await resolveCustomer(tenantId, normalizedName, null)
 
-  let customerId: string
-  let customerName: string
+  if (result.status === 'error') return '😕 Could not create customer. Try again.'
 
-  if (customers && customers.length > 0) {
-    customerId = customers[0].id
-    customerName = customers[0].name
-  } else {
-    const { data: newCust, error } = await supabaseAdmin
-      .from('customers')
-      .insert({ name: normalizedName, phone: normalizedName, tenant_id: tenantId })
-      .select('id, name')
-      .single()
-    if (error || !newCust) return '😕 Could not create customer. Try again.'
-    customerId = newCust.id
-    customerName = newCust.name
+  if (result.status === 'ambiguous') {
+    await storePendingConfirmation(
+      tenantId,
+      result.incomingName,
+      result.candidate.id,
+      result.candidate.name,
+      fullIntent as unknown as Record<string, unknown>,
+      rawText
+    )
+    const shorter = result.incomingName.length <= result.candidate.name.length ? result.incomingName : result.candidate.name
+    const longer = result.incomingName.length > result.candidate.name.length ? result.incomingName : result.candidate.name
+    return (
+      `🤔 Is *${shorter}* the same person as *${longer}* (existing customer)?\n\n` +
+      `Reply *Yes* to confirm or *No* to create a new customer.`
+    )
   }
+
+  const customerId = result.id
+  const customerName = result.name
 
   const jobRows = parsed.items.map((item) => ({
     tenant_id: tenantId,
@@ -328,7 +556,8 @@ async function handleAIPayment(
     transaction_type: 'credit' | 'debit'
     transaction_date: string | null
   },
-  rawText: string
+  rawText: string,
+  fullIntent: import('@/lib/ai-parser').ParsedIntent
 ): Promise<string> {
   if (data.code) {
     const { data: dup } = await supabaseAdmin
@@ -339,8 +568,28 @@ async function handleAIPayment(
     if (dup) return 'ℹ️ This payment has already been recorded.'
   }
 
-  const customer = await resolveCustomer(tenantId, data.customer_name, data.customer_phone)
-  if (!customer) return '😕 System error. Please try again later.'
+  const result = await resolveCustomer(tenantId, data.customer_name, data.customer_phone)
+
+  if (result.status === 'error') return '😕 System error. Please try again later.'
+
+  if (result.status === 'ambiguous') {
+    await storePendingConfirmation(
+      tenantId,
+      result.incomingName,
+      result.candidate.id,
+      result.candidate.name,
+      fullIntent as unknown as Record<string, unknown>,
+      rawText
+    )
+    const shorter = result.incomingName.length <= result.candidate.name.length ? result.incomingName : result.candidate.name
+    const longer = result.incomingName.length > result.candidate.name.length ? result.incomingName : result.candidate.name
+    return (
+      `🤔 Is *${shorter}* the same person as *${longer}* (existing customer)?\n\n` +
+      `Reply *Yes* to confirm or *No* to create a new customer.`
+    )
+  }
+
+  const customer = { id: result.id, name: result.name }
 
   const { error: txError } = await supabaseAdmin.from('transactions').insert({
     mpesa_code: data.code,
@@ -410,13 +659,18 @@ async function handleMpesaPayment(tenantId: string, messageText: string): Promis
 
   const txType = isDebit ? 'debit' : 'credit'
 
-  const [dupResult, customer] = await Promise.all([
+  const [dupResult, customerResult] = await Promise.all([
     supabaseAdmin.from('transactions').select('id').eq('mpesa_code', code).maybeSingle(),
     resolveCustomer(tenantId, customer_name, customer_phone),
   ])
 
   if (dupResult.data) return 'ℹ️ This payment has already been recorded.'
-  if (!customer) return '😕 System error. Please try again later.'
+  if (customerResult.status === 'error') return '😕 System error. Please try again later.'
+
+  // For M-Pesa regex fallback, if ambiguous we just auto-match (phone-based M-Pesa has high confidence)
+  const customer = customerResult.status === 'ambiguous'
+    ? { id: customerResult.candidate.id, name: customerResult.candidate.name }
+    : { id: customerResult.id, name: customerResult.name }
 
   const { error: txError } = await supabaseAdmin.from('transactions').insert({
     mpesa_code: code,
@@ -761,6 +1015,36 @@ export async function POST(request: NextRequest) {
       return reply(loginResult.response)
     }
 
+    // Check for pending name confirmation (yes/no response)
+    const pending = await getPendingConfirmation(tenantId)
+    if (pending) {
+      const trimmed = messageText.trim().toLowerCase()
+      const isYes = /^(yes|yeah|yep|ndio|sawa|confirm|y)$/i.test(trimmed)
+      const isNo = /^(no|nope|hapana|la|cancel|n)$/i.test(trimmed)
+
+      if (isYes) {
+        const result = await handleConfirmationResponse(tenantId, true, pending)
+        return reply(result)
+      } else if (isNo) {
+        const result = await handleConfirmationResponse(tenantId, false, pending)
+        return reply(result)
+      } else {
+        // Remind them to confirm — but don't block other commands
+        // If the message looks like a new command, clear the pending and process normally
+        const looksLikeCommand = /^(job|bal|login|debts?|income|summary|report)/i.test(trimmed)
+          || /Confirmed.*Ksh/i.test(messageText) // M-Pesa SMS
+        if (looksLikeCommand) {
+          await deletePendingConfirmation(tenantId)
+          // Fall through to normal processing
+        } else {
+          return reply(
+            `🤔 Is *${pending.incoming_name}* the same person as *${pending.matched_customer_name}*?\n\n` +
+            `Reply *Yes* to confirm or *No* to create a new customer.`
+          )
+        }
+      }
+    }
+
     // New user — show welcome message
     if (welcomeMsg) {
       return reply(welcomeMsg)
@@ -786,12 +1070,40 @@ export async function POST(request: NextRequest) {
         const loginResult = await handleWhatsAppLogin(tenantId, messageText)
         return reply(loginResult.response)
       }
+      // Report-style queries: "debts", "debts today", "balances", "income this week", "summary"
+      const reportMatch = messageText.trim().match(/^(debts?|deni|balances?|income|mapato|summary|muhtasari)(?:\s+(today|leo|this\s+week|wiki|this\s+month|mwezi))?$/i)
+      if (reportMatch) {
+        const keyword = reportMatch[1].toLowerCase()
+        const periodStr = (reportMatch[2] || '').toLowerCase()
+        const report = /^(debt|deni|balance)/i.test(keyword) ? 'unpaid' as const
+          : /^(income|mapato)/i.test(keyword) ? 'income' as const
+          : 'summary' as const
+        const period = /^(today|leo)/.test(periodStr) ? 'today' as const
+          : /^(this\s+week|wiki)/.test(periodStr) ? 'week' as const
+          : /^(this\s+month|mwezi)/.test(periodStr) ? 'month' as const
+          : 'all' as const
+        return reply(await handleReport(tenantId, report, period))
+      }
+      // "bal" alone (no customer name) → unpaid report
+      if (/^bal$/i.test(messageText.trim())) {
+        return reply(await handleReport(tenantId, 'unpaid', 'all'))
+      }
       const jobParsed = parseJobMessage(messageText)
       if (jobParsed) {
+        // Build a synthetic intent for the fallback path
+        const syntheticIntent = {
+          type: 'JOB' as const,
+          data: {
+            customer_name: jobParsed.customerName,
+            items: [{ description: jobParsed.description, quantity: 1, unit_price: jobParsed.amount, total: jobParsed.amount }],
+            total_price: jobParsed.amount,
+          },
+          raw_summary: `Job for ${jobParsed.customerName}: ${jobParsed.description}`,
+        }
         const msg = await handleJobCreation(tenantId, {
           customerName: jobParsed.customerName,
           items: [{ description: jobParsed.description, quantity: 1, unit_price: jobParsed.amount, total: jobParsed.amount }],
-        })
+        }, messageText, syntheticIntent)
         return reply(msg)
       }
       const balanceName = parseBalanceQuery(messageText)
@@ -804,13 +1116,13 @@ export async function POST(request: NextRequest) {
 
     switch (intent.type) {
       case 'PAYMENT':
-        responseMsg = await handleAIPayment(tenantId, intent.data, messageText)
+        responseMsg = await handleAIPayment(tenantId, intent.data, messageText, intent)
         break
       case 'JOB':
         responseMsg = await handleJobCreation(tenantId, {
           customerName: intent.data.customer_name,
           items: intent.data.items,
-        })
+        }, messageText, intent)
         break
       case 'QUERY':
         responseMsg = await handleBalanceQuery(tenantId, intent.data.target_name)

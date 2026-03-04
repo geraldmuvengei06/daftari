@@ -145,16 +145,39 @@ Rules:
    - If only a lump sum, quantity=1, unit_price=total
    - "brought 100 business cards for printing at 10/- each" → the client brought items TO BE printed. The customer is whoever is named. description: "business cards for printing", quantity: 100, unit_price: 10, total: 1000
 
-4. Queries: If the user asks about a specific customer's balance/debt:
+4. Queries: If the user asks about a SPECIFIC customer's balance/debt:
    - type: "QUERY"
    - data.target_name (title-cased)
    - data.intent: "BALANCE"
+   Examples:
+   - "Bal Jane" → QUERY, target_name: "Jane"
+   - "balance Jane" → QUERY, target_name: "Jane"
+   - "how much does Jane owe" → QUERY, target_name: "Jane"
+   - "deni ya John" → QUERY, target_name: "John"
 
-5. Reports: If the user asks for a business report (not about a specific customer):
+5. Reports: If the user asks for a business-wide report (NOT about a specific customer):
    - type: "REPORT"
    - data.report: "unpaid" | "income" | "summary"
    - data.period: "today" | "week" | "month" | "all"
-   Examples: "deni za leo" → unpaid/today, "mapato ya wiki hii" → income/week
+   
+   IMPORTANT — these shorthand words map to reports:
+   - "balances" / "all balances" / "madeni" → report: "unpaid", period: "all"
+   - "bal" (alone, no customer name after it) → report: "unpaid", period: "all"
+   - "debts" / "deni" / "debts today" / "deni za leo" → report: "unpaid", period varies
+   - "debts this week" / "deni za wiki" → report: "unpaid", period: "week"
+   - "debts this month" → report: "unpaid", period: "month"
+   - "income" / "mapato" / "income today" / "mapato ya leo" → report: "income", period varies
+   - "income this week" / "mapato ya wiki hii" → report: "income", period: "week"
+   - "summary" / "muhtasari" → report: "summary", period: "all"
+   - "summary today" → report: "summary", period: "today"
+   
+   Period detection:
+   - "today" / "leo" → "today"
+   - "this week" / "wiki hii" / "wiki" → "week"
+   - "this month" / "mwezi huu" / "mwezi" → "month"
+   - No period specified → "all" (default)
+   - "debts" alone with no time qualifier → period: "all"
+   - "debts today" → period: "today"
 
 6. Login: "Login", "niingie", "sign in" →
    - type: "LOGIN", data: {}
@@ -165,7 +188,8 @@ DISAMBIGUATION RULES (apply in order):
 - If the message contains an M-Pesa transaction code → always PAYMENT
 - If the message describes a service/product with pricing details (quantities, unit prices, descriptions of work) → JOB
 - If the message mentions someone paying or bringing money without service details → PAYMENT
-- If the message asks a question about a person → QUERY
+- If the message asks about a SPECIFIC person's balance (e.g. "Bal Jane", "balance for John") → QUERY
+- If the message is a general balance/debt request with NO specific customer name (e.g. "balances", "bal", "debts", "debts today") → REPORT (unpaid)
 - "Job" followed by a service description = JOB intent where "Job" is the customer name
 - "Job" followed by just an amount and no service = ambiguous, prefer PAYMENT if payment verbs present
 
